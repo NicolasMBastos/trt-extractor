@@ -1,0 +1,164 @@
+# keywords.yaml — camada 3 do classificador de documentos
+#
+# PROCEDÊNCIA. Duas origens, marcadas por classe. A distinção importa: uma foi
+# validada em produção, a outra não.
+#
+#   [PRODUÇÃO]  Pesos transpostos de TaxMap-main/taxmap/pdpj_selenium.py
+#               (`pontuar_texto_peticao_inicial`, `_PESOS_ACORDAO`,
+#               `_PESOS_SENTENCA`, `_PESOS_NEGATIVOS_JULGAMENTO`), em uso no
+#               escritório. Não alterei nenhum peso.
+#
+#   [DERIVADO]  `acordo` e `laudo_pericia` não existem no TaxMap. Derivei-os por
+#               analogia, seguindo o mesmo padrão, a pedido do dono do projeto.
+#               NÃO são validados. Revisar contra amostra rotulada antes da fase 4.
+#
+# -----------------------------------------------------------------------------
+# ONDE ESTE ARQUIVO ENTRA
+# -----------------------------------------------------------------------------
+# Classificador em quatro camadas, nesta ordem (arquitetura §3.5):
+#   1. `tipoDocumento` do PJe        — quando presente e confiável
+#   2. posição no fluxo processual   — 1º documento juntado pelo polo ativo é
+#                                      petição inicial em quase todos os casos
+#   3. ESTE ARQUIVO
+#   4. desempate por LLM             — só nos ambíguos, veredito persistido
+#
+# Abaixo de `score_minimo` a camada SE ABSTÉM e passa adiante. Não classifica no
+# chute — é o que mantém `confianca` honesta.
+#
+# -----------------------------------------------------------------------------
+# ESQUEMA
+# -----------------------------------------------------------------------------
+# Pontuação ponderada com termos negativos. Os negativos são o que separa
+# "petição inicial" de "anexo da petição inicial" — um classificador só-positivo
+# confunde os dois.
+#
+# Comparação sobre texto NORMALIZADO: minúsculas, sem acento, espaços colapsados.
+# Os termos abaixo já estão nessa forma. Substring simples, sem regex.
+#
+# classes:
+#   <classe>:
+#     score_minimo: int
+#     positivos: [{termo: str, peso: int > 0}]
+#     negativos: [{termo: str, peso: int < 0}]
+#
+# LACUNA CONHECIDA: o TaxMap tinha uma regra composta (`peticao` E `inicial`, +80)
+# que este esquema não expressa — só há termo isolado. O termo "peticao inicial"
+# (+150) cobre a maioria dos casos. Se a amostra mostrar perda, o esquema ganha
+# `combinados:` numa v2. Não complicar antes de medir.
+# -----------------------------------------------------------------------------
+
+versao_esquema: 1
+
+# Concatenados nesta ordem antes de pontuar. Espelha o TaxMap, que normalizava
+# titulo + texto + href.
+onde_buscar:
+  - titulo
+  - tipo_pje
+  - nome_arquivo
+  - texto_primeira_pagina
+
+classes:
+
+  # [PRODUÇÃO] ---------------------------------------------------------------
+  peticao_inicial:
+    score_minimo: 100
+    positivos:
+      - {termo: "peticao inicial.pdf", peso: 300}
+      - {termo: "peticao_inicial.pdf", peso: 300}
+      - {termo: "peticao inicial",     peso: 150}
+      - {termo: "exordial",            peso: 50}
+      - {termo: "inicial",             peso: 20}
+    negativos:
+      - {termo: "anexo",           peso: -60}
+      - {termo: "certidao",        peso: -60}
+      - {termo: "procuracao",      peso: -40}
+      - {termo: "ato ordinatorio", peso: -40}
+
+  # [PRODUÇÃO] ---------------------------------------------------------------
+  acordao:
+    score_minimo: 100
+    positivos:
+      - {termo: "acordao", peso: 300}
+      - {termo: "ementa",  peso: 120}
+      - {termo: "voto",    peso: 40}
+    negativos:
+      - {termo: "interlocutoria",  peso: -150}
+      - {termo: "intimacao",       peso: -120}
+      - {termo: "certidao",        peso: -120}
+      - {termo: "despacho",        peso: -100}
+      - {termo: "ato ordinatorio", peso: -100}
+      - {termo: "citacao",         peso: -100}
+      - {termo: "peticao",         peso: -80}
+      - {termo: "procuracao",      peso: -80}
+      - {termo: "anexo",           peso: -60}
+
+  # [PRODUÇÃO] ---------------------------------------------------------------
+  sentenca:
+    score_minimo: 100
+    positivos:
+      - {termo: "sentenca",   peso: 300}
+      - {termo: "julgamento", peso: 60}
+    negativos:
+      - {termo: "interlocutoria",  peso: -150}
+      - {termo: "intimacao",       peso: -120}
+      - {termo: "certidao",        peso: -120}
+      - {termo: "despacho",        peso: -100}
+      - {termo: "ato ordinatorio", peso: -100}
+      - {termo: "citacao",         peso: -100}
+      - {termo: "peticao",         peso: -80}
+      - {termo: "procuracao",      peso: -80}
+      - {termo: "anexo",           peso: -60}
+
+  # [DERIVADO — não validado] ------------------------------------------------
+  # Guarda contra colisão: "acordao" NÃO contém "acordo" como substring
+  # (acord-a-o vs acord-o), mas "acordos" contém. O negativo forte em "acordao"
+  # protege documentos que citem os dois.
+  acordo:
+    score_minimo: 100
+    positivos:
+      - {termo: "termo de acordo",        peso: 300}
+      - {termo: "termo de conciliacao",   peso: 280}
+      - {termo: "acordo homologado",      peso: 260}
+      - {termo: "homologacao de acordo",  peso: 260}
+      - {termo: "acordo",                 peso: 150}
+      - {termo: "conciliacao",            peso: 120}
+      - {termo: "transacao",              peso: 60}
+    negativos:
+      - {termo: "acordao",             peso: -200}
+      - {termo: "ementa",              peso: -120}
+      - {termo: "proposta de acordo",  peso: -100}
+      - {termo: "intimacao",           peso: -120}
+      - {termo: "certidao",            peso: -120}
+      - {termo: "despacho",            peso: -100}
+      - {termo: "ato ordinatorio",     peso: -100}
+      - {termo: "procuracao",          peso: -80}
+      - {termo: "anexo",               peso: -60}
+
+  # [DERIVADO — não validado] ------------------------------------------------
+  # Classe secundária no briefing ("confirmar prioridade"). Termos de
+  # insalubridade/periculosidade são os tipos de perícia mais frequentes na
+  # Justiça do Trabalho — pesos baixos, são sinal de contexto, não de tipo.
+  laudo_pericia:
+    score_minimo: 100
+    positivos:
+      - {termo: "laudo pericial",       peso: 300}
+      - {termo: "laudo de pericia",     peso: 300}
+      - {termo: "laudo tecnico",        peso: 200}
+      - {termo: "laudo",                peso: 150}
+      - {termo: "pericia",              peso: 120}
+      - {termo: "perito",               peso: 100}
+      - {termo: "quesitos",             peso: 80}
+      - {termo: "insalubridade",        peso: 60}
+      - {termo: "periculosidade",       peso: 60}
+      - {termo: "vistoria",             peso: 50}
+    negativos:
+      - {termo: "impugnacao ao laudo",       peso: -200}
+      - {termo: "indicacao de assistente",   peso: -150}
+      - {termo: "nomeacao de perito",        peso: -150}
+      - {termo: "honorarios periciais",      peso: -120}
+      - {termo: "intimacao",                 peso: -120}
+      - {termo: "certidao",                  peso: -120}
+      - {termo: "despacho",                  peso: -100}
+      - {termo: "ato ordinatorio",           peso: -100}
+      - {termo: "peticao",                   peso: -80}
+      - {termo: "anexo",                     peso: -60}

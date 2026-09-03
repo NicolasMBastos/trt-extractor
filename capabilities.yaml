@@ -1,0 +1,212 @@
+# capabilities.yaml — matriz de capacidade por tribunal
+#
+# DADO DE PRODUÇÃO, não documentação. O orquestrador lê deste arquivo em runtime
+# para decidir a via de aquisição, o teto de concorrência e o rate limit de cada
+# tribunal. Um valor errado aqui vira tráfego anormal ou throughput jogado fora.
+#
+# Regra: só sai de `nao_testado` com medição registrada e `testado_em` preenchido.
+# Nada de preencher por analogia com tribunal vizinho.
+#
+# -----------------------------------------------------------------------------
+# ESQUEMA
+# -----------------------------------------------------------------------------
+# <sigla>:
+#   regiao: str                  UFs de jurisdição. Informativo.
+#   status: nao_testado | parcial | operacional | bloqueado
+#
+#   vias:                        O que funciona, medido. Ordem de preferência é a
+#                                da enum `Via` em core/contracts.py, não a daqui.
+#     pdpj_api:        desconhecido | ok | ok_sem_binario | indisponivel
+#     mni_soap:        desconhecido | ok | ok_sem_documentos | sem_convenio | indisponivel
+#     autos_filtrado:  desconhecido | ok | sem_filtro_tipo | indisponivel
+#     doc_individual:  desconhecido | ok | indisponivel
+#     browser:         desconhecido | ok | indisponivel
+#     legado:          desconhecido | ok | indisponivel | nao_aplicavel
+#
+#   transporte: desconhecido | httpx | in_page_fetch
+#                                Resultado da hipótese H2 (docs/arquitetura.md §4).
+#                                `httpx` só depois de provar que o WAF aceita.
+#
+#   limites:
+#     jobs_concorrentes_por_sessao: int|null   MÉTRICA MAIS IMPORTANTE DA FASE 0.
+#                                              Mais paralelismo de rede que isto é
+#                                              desperdício — precisa é de mais sessão.
+#     req_por_minuto: int|null                 Rate limit por (tribunal, credencial).
+#                                              Default conservador até medir.
+#     limiar_download_sincrono_mb: float|null  Abaixo disso baixa direto; acima enfileira.
+#     latencia_geracao_p50_s: float|null       Da submissão até aparecer na Área de Download.
+#     latencia_geracao_p95_s: float|null
+#
+#   auth:
+#     cpf_senha_funciona: desconhecido | sim | nao
+#                                Se `sim`, o certificado sai do caminho crítico.
+#     mfa: desconhecido | por_dispositivo | por_login | ausente
+#     sessao_ttl_s: int|null     Quanto a sessão dura antes de renovar.
+#
+#   filtro_tipos_disponiveis: [str]  Rótulos de tipo que o tribunal oferece no
+#                                    filtro, com a grafia dele. Sem tradução aqui —
+#                                    o mapeamento para as 5 classes é do adapter.
+#
+#   quirks: [str]              Desvios do genérico que exigem override no adapter.
+#   janelas_manutencao: [str]  Indisponibilidades programadas conhecidas.
+#   adapter: str               Módulo que atende. `pje2x` é o genérico.
+#   testado_em: YYYY-MM-DD|null
+#   har: str|null              Caminho do HAR sanitizado que comprova o fluxo.
+#   notas: str
+# -----------------------------------------------------------------------------
+
+versao_esquema: 1
+atualizado_em: "2026-09-03"
+
+# Defaults conservadores, aplicados a todo tribunal ainda não medido.
+# Estes números existem para NÃO gerar tráfego anormal enquanto não se mediu.
+# Não são estimativa de capacidade — são piso de segurança.
+defaults: &defaults
+  status: nao_testado
+  vias:
+    pdpj_api: desconhecido
+    mni_soap: desconhecido
+    autos_filtrado: desconhecido
+    doc_individual: desconhecido
+    browser: desconhecido
+    legado: desconhecido
+  transporte: desconhecido
+  limites:
+    jobs_concorrentes_por_sessao: 1
+    req_por_minuto: 6
+    limiar_download_sincrono_mb: 3.0
+    latencia_geracao_p50_s: null
+    latencia_geracao_p95_s: null
+  auth:
+    cpf_senha_funciona: desconhecido
+    mfa: desconhecido
+    sessao_ttl_s: null
+  filtro_tipos_disponiveis: []
+  quirks: []
+  janelas_manutencao: []
+  adapter: pje2x
+  testado_em: null
+  har: null
+  notas: ""
+
+tribunais:
+
+  TRT1:
+    <<: *defaults
+    regiao: "RJ"
+
+  TRT2:
+    <<: *defaults
+    regiao: "SP - capital e Grande São Paulo"
+    notas: "Alvo de contraste (grande). So depois que TRT4 fechar ponta a ponta."
+
+  TRT3:
+    <<: *defaults
+    regiao: "MG"
+
+  TRT4:
+    <<: *defaults
+    regiao: "RS"
+    status: parcial
+    # Sobrescreve apenas o que foi MEDIDO. O resto herda o default conservador.
+    vias:
+      pdpj_api: desconhecido        # caminho autenticado nao testado (falta login titular)
+      mni_soap: sem_convenio        # Q4d: exige credenciamento previo junto ao CNJ/TRT4
+      autos_filtrado: desconhecido
+      doc_individual: ok_publico_com_captcha  # consulta-api serve /documentos/conteudo, mas barrado por captcha
+      browser: desconhecido
+      legado: desconhecido
+    consulta_api_base: "https://pje.trt4.jus.br/pje-consulta-api/api"
+    header_grau: "X-Grau-Instancia"
+    testado_em: "2026-09-03"
+    har: research/evidencia/trt4-consulta-api-2026-09-03.md
+    notas: >-
+      ALVO PRIMARIO do projeto (Rio Grande do Sul). PJe 1o e 2o grau sao sistemas
+      separados: pje.trt4.jus.br/primeirograu e /segundograu. Consulta publica em
+      pje.trt4.jus.br/consultaprocessual/ (busca por numero, Consulta Cidadao,
+      pautas, sessao de julgamento) e acesso restrito em /consultaprocessual/login.
+      MNI: nao ha WSDL oficial publicado; o fluxo exige credenciamento previo, com
+      ambiente de homologacao e usuario/senha informados ao CNJ. Os 404/403 do
+      primeiro probe foram de URL inferida, nao prova contra o MNI.
+      Ver docs/fase-0/capacidade.md.
+
+  TRT5:
+    <<: *defaults
+    regiao: "BA"
+
+  TRT6:
+    <<: *defaults
+    regiao: "PE"
+
+  TRT7:
+    <<: *defaults
+    regiao: "CE"
+
+  TRT8:
+    <<: *defaults
+    regiao: "PA, AP"
+
+  TRT9:
+    <<: *defaults
+    regiao: "PR"
+
+  TRT10:
+    <<: *defaults
+    regiao: "DF, TO"
+
+  TRT11:
+    <<: *defaults
+    regiao: "AM, RR"
+
+  TRT12:
+    <<: *defaults
+    regiao: "SC"
+
+  TRT13:
+    <<: *defaults
+    regiao: "PB"
+    notas: "Alvo de contraste (pequeno). So depois que TRT4 fechar ponta a ponta."
+
+  TRT14:
+    <<: *defaults
+    regiao: "RO, AC"
+
+  TRT15:
+    <<: *defaults
+    regiao: "SP - interior (Campinas)"
+
+  TRT16:
+    <<: *defaults
+    regiao: "MA"
+
+  TRT17:
+    <<: *defaults
+    regiao: "ES"
+
+  TRT18:
+    <<: *defaults
+    regiao: "GO"
+
+  TRT19:
+    <<: *defaults
+    regiao: "AL"
+
+  TRT20:
+    <<: *defaults
+    regiao: "SE"
+
+  TRT21:
+    <<: *defaults
+    regiao: "RN"
+
+  TRT22:
+    <<: *defaults
+    regiao: "PI"
+
+  TRT23:
+    <<: *defaults
+    regiao: "MT"
+
+  TRT24:
+    <<: *defaults
+    regiao: "MS"

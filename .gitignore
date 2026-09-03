@@ -1,0 +1,79 @@
+# ---------------------------------------------------------------------------
+# CREDENCIAIS E MATERIAL CRIPTOGRAFICO — nunca versionar
+# ---------------------------------------------------------------------------
+*.pfx
+*.p12
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+*.jks
+*.keystore
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+certs/
+*.token
+*_token.json
+storage_state*.json
+cookies*.json
+session*.json
+
+# Config do PJeOffice contem blob de credencial do SSO
+pjeoffice-pro.config
+
+# ---------------------------------------------------------------------------
+# ARTEFATOS BAIXADOS — nunca versionar (dado de processo, LGPD)
+# ---------------------------------------------------------------------------
+*.pdf
+*.PDF
+artifacts/
+downloads/
+data/
+runtime/
+blobs/
+ocr_out/
+
+# HAR pode conter Authorization, cookies e conteudo de processo.
+# Versionar apenas o sanitizado, com sufixo .sanitized.har (ver docs/fase-0).
+research/har/*.har
+!research/har/*.sanitized.har
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# ---------------------------------------------------------------------------
+# SO / editor
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Artefatos de orquestracao (scratch da sessao)
+batch*.json
+frentes*.json
+frentes*.log
+
+# Saidas cruas de agentes (scratch de orquestracao)
+*_saida.txt
+codex*.txt
+opencode*.txt
+agy*.txt

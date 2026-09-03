@@ -117,7 +117,15 @@ tribunais:
       browser: desconhecido
       legado: desconhecido
     consulta_api_base: "https://pje.trt4.jus.br/pje-consulta-api/api"
+    autenticado_api_base: "https://pje.trt4.jus.br/pje-comum-api/api"
+    seguranca_api_base: "https://pje.trt4.jus.br/pje-seguranca/api"
     header_grau: "X-Grau-Instancia"
+    auth:
+      cpf_senha_funciona: desconhecido   # login testado foi por certificado/PDPJ
+      mfa: por_dispositivo               # sessao de dispositivo do Keycloak; login raro
+      sessao_ttl_s: 3600                 # access_token JWT: 60 min exatos, sem refresh embutido
+      sessao_cookie: access_token        # JWT legivel por JS (nao httpOnly) + Xsrf-Token
+      autos_completos: exige_habilitacao # pje-comum-api = 500 ARQ-516 sem vinculo nos autos
     testado_em: "2026-09-03"
     har: research/evidencia/trt4-consulta-api-2026-09-03.md
     notas: >-

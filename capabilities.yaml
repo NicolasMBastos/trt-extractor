@@ -127,6 +127,8 @@ tribunais:
       sessao_ttl_s: 3600                 # access_token JWT: 60 min exatos, sem refresh embutido
       sessao_cookie: access_token        # JWT legivel por JS (nao httpOnly) + Xsrf-Token
       autos_completos: exige_habilitacao # pje-comum-api = 500 ARQ-516 sem vinculo nos autos
+      sessao_ttl_nacional_s: 28800       # PDPJ portaldeservicos: JWT vive 8h (vs 60min do PJe local)
+      jwt_expoe_identidade: true         # name, CPF, email, sub, roles do titular em cada request (ADR 007)
     testado_em: "2026-09-03"
     har: research/evidencia/trt4-consulta-api-2026-09-03.md
     notas: >-

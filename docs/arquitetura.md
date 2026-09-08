@@ -21,6 +21,16 @@ Consequência: a fase 0 deixa de ser "descobrir como funciona" e passa a ser
 **falsificar duas hipóteses específicas** (H1 e H2, seção 4). Isso encurta a fase 0 de
 semanas para dias.
 
+> **ATUALIZAÇÃO 2026-09-03 — H1 e H2 RESPONDIDAS ao vivo (TRT4, processo real):**
+> - **H1 = VERDADEIRA.** A API nacional `portaldeservicos.pdpj.jus.br/api/v2` serve o
+>   binário: cada documento traz `hrefBinario` → `%PDF`. Um login nacional entrega PDF de
+>   processo público de terceiro, de qualquer TRT. **24 integrações → 1.**
+> - **H2 = FALSA (com correção).** httpx puro leva 403, mas `http2=True` + User-Agent de
+>   browser passa em tudo — listagem e binário. **`HttpxTransport` é o transporte de
+>   volume; sem fazenda de browser.**
+> - **Fase 2 concluída:** petição inicial baixada ponta a ponta (httpx → sha256 →
+>   storage), metadados corretos. Ver `research/evidencia/pdpj-nacional-H1-CONFIRMADA-2026-09-03.md`.
+
 Fonte dos achados 1–3: inventário do repositório de certificados do Windows, config do
 PJeOffice Pro (`~/.pjeoffice-pro/pjeoffice-pro.config`) e código de produção do projeto
 irmão `TaxMap-main`, na mesma máquina. Detalhe em `docs/decisions/`.

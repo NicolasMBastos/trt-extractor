@@ -97,3 +97,31 @@ binário. Um adapter que tivesse a escolha embutida teria que ser reescrito; com
 Consequência prática: o teto de concorrência do download volta a ser de rede, não de
 memória por contexto de browser. O plano de capacidade da fase 6 melhora
 substancialmente — mas só depois de H2.2 ser medida de fato.
+
+---
+
+## Adendo 2 — 2026-09-03: H2 medida. httpx vence (http2 + UA)
+
+Medido ao vivo contra a API nacional autenticada (`portaldeservicos.pdpj.jus.br/api/v2`),
+com o processo-teste 0020890-39.2024.5.04.0015. Evidência em
+`research/evidencia/pdpj-nacional-H1-CONFIRMADA-2026-09-03.md`.
+
+| httpx | resultado |
+|---|---|
+| HTTP/1.1, sem User-Agent | 403 Forbidden |
+| **HTTP/2 + User-Agent de browser** | **200** — listagem (220 KB) e binário (%PDF) |
+
+**H2 é FALSA com a correção.** O WAF barra HTTP/1.1 e/ou ausência de UA — não a impressão
+TLS. `HttpxTransport` com `http2=True` e UA de Chrome faz todo o caminho de volume.
+
+**Decisão atualizada:**
+- `HttpxTransport` é o transporte **padrão e único** para a Via 0 nacional. Precisa nascer
+  com `http2=True` e um header `User-Agent` de browser — isso é requisito, não cosmético.
+- `InPageFetchTransport` **não será implementado agora.** Continua no contrato como opção
+  (a camada existe), mas sem tribunal que a exija, não há o que construir. Se algum TRT
+  local (não a via nacional) barrar httpx mesmo com http2+UA, aí sim.
+- O teto de concorrência volta a ser de rede/servidor, não de memória por contexto de
+  browser — o que torna o plano de capacidade da fase 6 muito mais simples.
+
+A camada `Transport` se pagou: permitiu medir H2 depois dos contratos, e o resultado
+(httpx vence) é configuração, não reescrita.

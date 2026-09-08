@@ -110,12 +110,13 @@ tribunais:
     status: parcial
     # Sobrescreve apenas o que foi MEDIDO. O resto herda o default conservador.
     vias:
-      pdpj_api: desconhecido        # caminho autenticado nao testado (falta login titular)
+      pdpj_api: ok                  # CONFIRMADO: lista + serve binario (hrefBinario). Via de volume.
       mni_soap: sem_convenio        # Q4d: exige credenciamento previo junto ao CNJ/TRT4
       autos_filtrado: desconhecido
       doc_individual: ok_publico_com_captcha  # consulta-api serve /documentos/conteudo, mas barrado por captcha
       browser: desconhecido
       legado: desconhecido
+    transporte: httpx              # http2=True + UA de browser
     consulta_api_base: "https://pje.trt4.jus.br/pje-consulta-api/api"
     autenticado_api_base: "https://pje.trt4.jus.br/pje-comum-api/api"
     seguranca_api_base: "https://pje.trt4.jus.br/pje-seguranca/api"

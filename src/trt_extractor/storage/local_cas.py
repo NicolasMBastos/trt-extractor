@@ -1,6 +1,6 @@
 """Storage content-addressed em disco local.
 
-Implementa o Protocol `Storage` de `core.contracts`. Cobre as fases 0–4; `S3Storage`
+Implementa o Protocol `Storage` de `core.contracts`. Cobre as fases 0-4; `S3Storage`
 entra na fase 5, atrás da mesma interface (ver arquitetura §2, D5).
 
 Duas propriedades que o resto do pipeline depende:

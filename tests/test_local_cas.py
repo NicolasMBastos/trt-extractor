@@ -10,8 +10,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from trt_extractor.core.contracts import Artefato, Storage  # noqa: E402
-from trt_extractor.storage.local_cas import (  # noqa: E402
+from trt_extractor.core.contracts import Artefato, Storage
+from trt_extractor.storage.local_cas import (
     LocalCASStorage,
     ShaDivergenteError,
     sha256_de,
@@ -69,7 +69,9 @@ async def test_put_e_idempotente_e_nao_reescreve(storage: LocalCASStorage) -> No
     assert [p.name for p in folha.iterdir()] == [SHA]
 
 
-async def test_conteudos_diferentes_enderecos_diferentes(storage: LocalCASStorage) -> None:
+async def test_conteudos_diferentes_enderecos_diferentes(
+    storage: LocalCASStorage,
+) -> None:
     a = await storage.put(artefato(b"documento A"))
     b = await storage.put(artefato(b"documento B"))
     assert a != b

@@ -42,7 +42,7 @@ REGIOES: dict[int, str] = {
 # Alvos da fase 0: um grande, um médio, um pequeno.
 ALVOS_FASE_0 = {2: "grande", 4: "medio", 13: "pequeno"}
 
-CABECALHO = '''# capabilities.yaml — matriz de capacidade por tribunal
+CABECALHO = """# capabilities.yaml — matriz de capacidade por tribunal
 #
 # DADO DE PRODUÇÃO, não documentação. O orquestrador lê deste arquivo em runtime
 # para decidir a via de aquisição, o teto de concorrência e o rate limit de cada
@@ -78,7 +78,7 @@ CABECALHO = '''# capabilities.yaml — matriz de capacidade por tribunal
 #     req_por_minuto: int|null                 Rate limit por (tribunal, credencial).
 #                                              Default conservador até medir.
 #     limiar_download_sincrono_mb: float|null  Abaixo disso baixa direto; acima enfileira.
-#     latencia_geracao_p50_s: float|null       Da submissão até aparecer na Área de Download.
+#     latencia_geracao_p50_s: float|null       Da submissão à Área de Download.
 #     latencia_geracao_p95_s: float|null
 #
 #   auth:
@@ -134,7 +134,7 @@ defaults: &defaults
   notas: ""
 
 tribunais:
-'''
+"""
 
 
 def main() -> None:
@@ -149,7 +149,7 @@ def main() -> None:
     for n in sorted(REGIOES):
         sigla = f"TRT{n}"
         linhas.append(f"  {sigla}:")
-        linhas.append(f"    <<: *defaults")
+        linhas.append("    <<: *defaults")
         linhas.append(f'    regiao: "{REGIOES[n]}"')
         if n in ALVOS_FASE_0:
             linhas.append(

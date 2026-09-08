@@ -18,7 +18,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-from sanitizar_har import MARCADOR, caminho_saida, main, redigir_texto, sanitizar  # noqa: E402
+from sanitizar_har import (
+    MARCADOR,
+    caminho_saida,
+    main,
+    redigir_texto,
+    sanitizar,
+)
 
 TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.cargaUtilFalsa.assinaturaFalsa"
 BASE64_LONGO = "QUJD" * 200  # 800 chars
@@ -80,9 +86,7 @@ def har() -> dict:
                     },
                     "response": {
                         "status": 200,
-                        "headers": [
-                            {"name": "Content-Type", "value": "application/pdf"}
-                        ],
+                        "headers": [{"name": "Content-Type", "value": "application/pdf"}],
                         "cookies": [],
                         "content": {
                             "size": 900,
@@ -127,7 +131,10 @@ def test_set_cookie_da_resposta_redigido(har: dict) -> None:
 
 def test_query_param_sensivel_redigido(har: dict) -> None:
     limpo, _ = sanitizar(har)
-    qs = {q["name"]: q["value"] for q in limpo["log"]["entries"][0]["request"]["queryString"]}
+    qs = {
+        q["name"]: q["value"]
+        for q in limpo["log"]["entries"][0]["request"]["queryString"]
+    }
     assert qs["access_token"] == MARCADOR
 
 
@@ -178,14 +185,16 @@ def test_status_e_timing_sobrevivem(har: dict) -> None:
 
 def test_header_nao_sensivel_intacto(har: dict) -> None:
     limpo, _ = sanitizar(har)
-    por_nome = {h["name"]: h["value"] for h in limpo["log"]["entries"][0]["request"]["headers"]}
+    por_nome = {
+        h["name"]: h["value"] for h in limpo["log"]["entries"][0]["request"]["headers"]
+    }
     assert por_nome["Accept"] == "application/json"
 
 
 def test_json_pequeno_preservado_mas_redigido(har: dict) -> None:
     limpo, _ = sanitizar(har)
     texto = limpo["log"]["entries"][0]["response"]["content"]["text"]
-    assert '"ok": true' in texto        # estrutura sobrevive
+    assert '"ok": true' in texto  # estrutura sobrevive
     assert "111.222.333-44" not in texto  # dado pessoal não
 
 
@@ -211,7 +220,9 @@ def test_entrada_invalida_falha_alto() -> None:
 
 
 def test_nome_de_saida_padrao() -> None:
-    assert caminho_saida(Path("a/TRT4-login.har"), None).name == "TRT4-login.sanitized.har"
+    assert (
+        caminho_saida(Path("a/TRT4-login.har"), None).name == "TRT4-login.sanitized.har"
+    )
 
 
 def test_cli_ponta_a_ponta(har: dict, tmp_path: Path) -> None:

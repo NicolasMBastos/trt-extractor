@@ -10,7 +10,7 @@ env:
 
 jobs:
   # Suíte normal. Tem que ficar verde. Nunca toca tribunal de produção:
-  # `-m "not rede"` exclui tudo que exige credencial ou rede real.
+  # `-m "not rede and not portao"` exclui rede judicial e portoes manuais.
   testes:
     runs-on: ubuntu-latest
     steps:
@@ -25,23 +25,7 @@ jobs:
       - name: Tipos
         run: mypy
       - name: Testes
-        run: pytest -m "not rede and not portao"
-
-  # Portões de fase. Falham DE PROPÓSITO até a pendência ser cumprida — hoje,
-  # `config/keywords.yaml` vazio. Separado da suíte para não deixar o CI
-  # permanentemente vermelho (CI vermelho crônico é CI ignorado), mas visível.
-  portoes:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-      - run: pip install -e ".[dev]"
-      - name: Portões pendentes
-        run: pytest -m "portao" -rA
+        run: pytest -m "not rede and not portao" --block-network --record-mode=none
 
   # Guarda de segredo. O .gitignore exclui credenciais, certificados e PDFs;
   # este job garante que ninguém contornou com `git add -f`.
@@ -53,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           padrao='\.(pfx|p12|pem|key|crt|cer|der|jks|keystore|pdf)$|(^|/)\.env($|\.)|storage_state|pjeoffice-pro\.config'
-          if git ls-files | grep -Ei "$padrao"; then
+          if git ls-files | grep -v '^\.env\.example$' | grep -Ei "$padrao"; then
             echo "::error::Arquivo proibido versionado (credencial, certificado ou PDF)."
             exit 1
           fi

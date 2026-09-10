@@ -117,7 +117,7 @@ Um hook redireciona `WebFetch` para o MCP `context-mode`, que **falha ao conecta
 máquina. `WebSearch` funciona. Para buscar documentação, use o venv:
 
 ```python
-import httpx   # UA de browser, timeout, follow_redirects=True
+import httpx  # UA de browser, timeout, follow_redirects=True
 ```
 
 Isso é leitura de página institucional pública — **não** confunda com bater em tribunal.

@@ -16,6 +16,9 @@ objetivo é volume e velocidade, não acesso a algo indisponível.
 
 | Documento | O que é |
 |---|---|
+| [`Continua_codex.md`](Continua_codex.md) | **Comece aqui.** O mapa do projeto: contexto, o que está provado, o que falta, roadmap |
+| [`docs/execucao/handoff-orquestrador.md`](docs/execucao/handoff-orquestrador.md) | **Se você vai orquestrar agentes:** estado do canvas, quais funcionam, armadilhas de ambiente, contrato de tarefa |
+| [`docs/canais-publicos/`](docs/canais-publicos/) | O que dá para extrair **sem autenticar** — medido, com os percentuais honestos por classe |
 | [`docs/arquitetura.md`](docs/arquitetura.md) | A arquitetura, e onde ela diverge do briefing original |
 | [`docs/fase-0/plano.md`](docs/fase-0/plano.md) | Checklist executável da fase 0 + **3 perguntas para o dono do projeto** |
 | [`docs/decisions/`](docs/decisions/) | Registros de decisão arquitetural |

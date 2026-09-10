@@ -186,10 +186,16 @@ inútil no log deles.
 
 ```powershell
 .venv\Scripts\python.exe -m pytest              # 224 passed, 2 skipped
-.venv\Scripts\python.exe -m ruff check src tests
-.venv\Scripts\python.exe -m ruff format --check src tests
+.venv\Scripts\python.exe -m ruff check .        # ponto, não "src tests" — ver abaixo
+.venv\Scripts\python.exe -m ruff format --check .
 .venv\Scripts\python.exe -m mypy                # 13 arquivos
 ```
+
+**Rode exatamente o comando do CI, com o `.`.** O CI faz `ruff check . && ruff format
+--check .` no repo inteiro. Rodar `--check src tests` é mais estreito e **deixa passar
+coisa que quebra o CI**: aconteceu em 2026-09-10, num commit só de documentação — o ruff
+formata blocos ```` ```python ```` **dentro de markdown**, e três espaços antes de um
+comentário inline num exemplo do próprio handoff derrubaram o job.
 
 E antes de qualquer commit, o guarda de segredos do CI, rodado local:
 
@@ -242,6 +248,7 @@ endpoint do PDF).
 | Afirmar "os testes passaram" sem rodar | Cole a saída real. |
 | Insistir depois de `429` | Pare. Registre. Escale. |
 | Formatar e commitar sem ler o diff | O `ruff format` já duplicou um import. |
+| Rodar o lint mais estreito que o do CI | `ruff check .` e `ruff format --check .`, com o ponto. Já quebrou o CI num commit só de docs. |
 | Preencher `capabilities.yaml` por analogia | Só com medição autorizada e revisada. |
 | Tratar `api/v2` do PDPJ como "API externa" | É o backend do próprio portal. Usá-la **é** raspar o portal do jeito certo. |
 | Assumir que o transporte de um canal vale para outro | Medido: PDPJ e FALCÃO se comportam ao contrário. |

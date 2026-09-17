@@ -146,6 +146,32 @@ async def test_maps_public_and_restricted_without_dropping_refs() -> None:
     assert transport.calls == [f"{BASE_URL}/processos/{CNJ}"]
 
 
+@pytest.mark.parametrize(
+    ("codigo", "esperado"),
+    [
+        ("202", TipoDocumento.PETICAO_INICIAL),
+        ("550", TipoDocumento.SENTENCA),
+        ("14442", TipoDocumento.ACORDAO),
+    ],
+)
+async def test_classificador_tipo_pje_usa_mapa_medido_por_default(
+    codigo: str, esperado: TipoDocumento
+) -> None:
+    """Medido ao vivo em 2026-09-17 contra 8 tribunais reais (>2000 documentos):
+    202=Petição Inicial, 550=Sentença, 14442=Acórdão. Sem tipos_por_codigo
+    explícito, o adapter já vem com esse mapa por default."""
+    from trt_extractor.adapters.pdpj import TIPOS_POR_CODIGO_MEDIDO
+    from trt_extractor.classify.tipo_pje import ClassificadorTipoPje
+
+    transport = FakeTransport(process(wire_document(tipo={"codigo": int(codigo)})))
+    subject = adapter(transport)  # sem tipos_por_codigo -> usa TIPOS_POR_CODIGO_MEDIDO
+    docs = await subject.list_documents(SESSION, CNJ, Grau.PRIMEIRO)
+    assert docs[0].tipo_pje == codigo
+    classificador = ClassificadorTipoPje(TIPOS_POR_CODIGO_MEDIDO)
+    resultado = await classificador.classificar(docs[0], None)
+    assert resultado.tipo == esperado
+
+
 async def test_tipo_pje_cai_para_nome_quando_sem_codigo() -> None:
     """Regressão: medido ao vivo que o PDPJ nacional manda "tipo" sem "codigo"
     (só "nome"/"idCodex"/"idOrigem"). Sem fallback, tipo_pje ficava None pra todo

@@ -199,3 +199,67 @@ real**, usando o código de produção do projeto (não UI manual, não ponte ex
 Único ponto ainda não resolvido: qual campo real usar para classificar tipo de
 documento (item 4 acima) — sem isso, a seleção de classes-alvo (petição inicial,
 sentença, acórdão, acordo, laudo) continua sem sinal do PJe neste processo de amostra.
+
+---
+
+## Adendo 2026-09-17 (quarta sessão): mapa código→classe medido em 8 tribunais reais
+
+Com o pipeline fim-a-fim provado (adendo anterior), rodei o mesmo mecanismo contra
+mais 8 processos reais em segunda instância (TRT6, 7, 9, 11, 12, 14, 22, 23 —
+candidatos de gabinete/desembargador da rodada de descoberta original, que a UI não
+abria mas a API respondeu normalmente), respeitando ritmo (pausa de 12s entre
+tribunais, acima do piso de 6 req/min da matriz; parei a linha na primeira falha,
+sem insistir). **Mais de 2000 documentos reais inspecionados**, só metadados de
+tipo (nome/código), nunca título de peça nem nome de parte.
+
+### Resultado: mapa código → classe
+
+| Código | Nome real (`tipo.nome`) | Classe |
+|---|---|---|
+| 202 | PETIÇÃO INICIAL / Petição Inicial | `PETICAO_INICIAL` |
+| 550 | SENTENÇA / Sentença | `SENTENCA` |
+| 14442 | Acórdão | `ACORDAO` |
+
+Nenhum código próprio apareceu para **acordo** nem **laudo/perícia** nesta amostra
+(laudo aparece só como "Apresentação de Laudo Pericial", sem código — cai no
+fallback por nome já implementado, não neste mapa).
+
+Também confirmado: o `codigo` 202 já estava certo desde a primeira suposição do
+projeto (`{"202": TipoDocumento.PETICAO_INICIAL}`, não medido até agora) — a
+suposição original acertou, mas só virou evidência nesta rodada.
+
+**Implementado:** `TIPOS_POR_CODIGO_MEDIDO` em `pdpj.py`, agora o default de
+`PdpjAdapter` quando `tipos_por_codigo` não é passado. Testes de regressão cobrindo
+os 3 códigos via `ClassificadorTipoPje`.
+
+### Amostra completa de nomes vistos (para referência futura, sem valor de doc)
+
+Documentos com código: CONTESTAÇÃO(16), Contraminuta(17), CONTRARRAZÕES(18),
+IMPUGNAÇÃO(26), CONTRATO(73), DECLARAÇÃO DE HIPOSSUFICIÊNCIA(79),
+MANIFESTAÇÃO(101), Notificação(103), PROVA EMPRESTADA(114),
+Exceção de Incompetência(157), Exceção de Pré-executividade(159),
+PETIÇÃO INICIAL(202), Recurso de Revista(233), RECURSO ORDINÁRIO(243),
+Contrato Social(293), Extrato Bancário(298), Extrato de FGTS(299),
+Ficha de Registro de Empregado(301), Recibo de EPI(326),
+Recibo de Vale Refeição(328), Agravo Interno(370), Embargos de Declaração(373),
+Alvará(398), CERTIDÃO(402), DECISÃO(404), DESPACHO(409), MANDADO(415),
+Ofício(417), Certidão de Julgamento(503), Certidão de Trânsito em Julgado(527),
+SENTENÇA(550), INTIMAÇÃO(575), Mandado de Citação(608),
+Comprovante de Depósito Judicial(709), Comprovante de Depósito Recursal(710),
+Comunicação de Acidente de Trabalho (CAT)(711), Edital(14404), Acórdão(14442),
+ESTATUTO(14482), Recibo(15431).
+
+Documentos sem código (fallback por nome): Ata da Audiência, Agravo de Petição,
+Agravo de Instrumento em Agravo de Petição, Apresentação de Laudo Pericial,
+Apresentação de Procuração, Apresentação de Quesitos, diversos documentos
+pessoais/cadastrais (RG, CTPS, CPF, CNPJ), integrações federais
+(Sisbajud/Renajud/Infojud), Jurisprudência, Planilhas de Cálculo, Procuração,
+Razões Finais, Sentença (cópia), Substabelecimento, e dois valores brutos não
+resolvidos pelo PJe (`TipoProcessoDocumento#758`, `TipoProcessoDocumento#765`).
+
+### Status atualizado
+
+Nível de classificação real (que fração das 5 classes-alvo tem sinal determinístico
+de `tipo_pje`): **3 de 5 PROVADAS** (petição inicial, sentença, acórdão). Acordo e
+laudo/perícia continuam sem código próprio medido — precisam de amostra com esses
+documentos presentes, ou de investigação por outro sinal (nome/posição no fluxo).

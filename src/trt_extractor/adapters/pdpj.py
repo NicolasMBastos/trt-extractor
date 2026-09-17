@@ -138,6 +138,20 @@ def _processo_json(corpo: bytes) -> dict[str, Any]:
     return _objeto(valor)
 
 
+#: Mapeamento código -> classe medido ao vivo em 2026-09-17 contra 8 tribunais
+#: reais (TRT6/7/9/11/12/14/22/23, >2000 documentos inspecionados), registrado em
+#: docs/execucao/validacao-24-trts-2026-09-17.md. Só as 3 classes-alvo com código
+#: numérico estável e inequívoco entram aqui — "acordo" e "laudo" não apareceram
+#: com código próprio nesta amostra (laudo aparece só como
+#: "Apresentação de Laudo Pericial", sem código, resolvido pelo fallback de nome
+#: em `_documento`, não por este mapa).
+TIPOS_POR_CODIGO_MEDIDO: Mapping[str, TipoDocumento] = {
+    "202": TipoDocumento.PETICAO_INICIAL,  # "PETIÇÃO INICIAL"/"Petição Inicial"
+    "550": TipoDocumento.SENTENCA,  # "SENTENÇA"/"Sentença"
+    "14442": TipoDocumento.ACORDAO,  # "Acórdão"
+}
+
+
 class PdpjAdapter:
     """Consumes sessions and transport; never chooses retry, storage or OCR policy."""
 
@@ -161,9 +175,7 @@ class PdpjAdapter:
         self._grau_mapper = grau_mapper
         self._session_provider = session_provider
         self._tipos = dict(
-            tipos_por_codigo
-            if tipos_por_codigo is not None
-            else {"202": TipoDocumento.PETICAO_INICIAL}
+            tipos_por_codigo if tipos_por_codigo is not None else TIPOS_POR_CODIGO_MEDIDO
         )
         self._geracao = geracao_pendente
         self._clock = clock

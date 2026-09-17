@@ -28,9 +28,28 @@ nacional especificamente, este runner hoje **espera até o prazo e desiste**
 
 Este módulo serve tribunais/portais que guardem o token em cookie ou localStorage
 (comum em apps que usam `oidc-client-js` com storage explícito) sem mudança nenhuma.
-Para o PDPJ nacional, falta decidir — com o dono do projeto, não aqui — se vale a
-pena negociar acesso documentado ao mecanismo de auth, ou se a via de aquisição
-segue sendo cliques reais na UI (fora do Python) em vez de `fetch` programático.
+
+## Segunda estratégia: hook de captura passiva (PDPJ nacional)
+
+Para o PDPJ nacional, `criar_montador`/`criar_sonda` acima não bastam — medido em
+2026-09-17 que o token vive só em memória do app (keycloak-js). A referência que
+resolve isso é o projeto irmão **TaxMap** (mesma organização, mesmo portal PDPJ,
+em produção): em vez de vasculhar estado interno do app (`window.*`, o que o Claude
+Code corretamente recusou a fazer nesta rodada), o TaxMap injeta um hook ANTES do
+app carregar que faz monkey-patch de `window.fetch`/`XMLHttpRequest.setRequestHeader`
+— captura passivamente o header `Authorization` que **o próprio app** anexa quando
+ele mesmo faz uma requisição real. É o equivalente a ler a aba Network do DevTools,
+não a sondar variável interna. Ver `jusbr.py:_JUSBR_API_HOOK_JS` no TaxMap e
+`docs/taxmap-stability/CERTIFICATE_BROWSER_DECISION.md` de lá.
+
+Duas diferenças em relação a `executar_handshake`:
+
+1. **Não abre um browser novo** — anexa a um Chrome já aberto e autenticado pelo
+   titular via `connect_over_cdp` (`--remote-debugging-port` no Chrome do titular).
+   Nunca fecha esse Chrome (mesma regra do TaxMap: é o navegador do titular).
+2. **Não lê `storage_state`** — lê o valor que o hook capturou, exposto via
+   `_ContextoComHookDeToken`, que reaproveita o mesmo laço de espera/sondagem do
+   `Handshake.capturar` sem duplicar essa lógica.
 """
 
 from __future__ import annotations
@@ -40,10 +59,54 @@ from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from ..core.contracts import Credencial, Session
-from ..core.handshake import Handshake, MontadorSessao, Sonda, Veredito
+from ..core.handshake import (
+    Handshake,
+    MontadorSessao,
+    Sonda,
+    Veredito,
+    expira_em_do_jwt,
+)
 from ..core.inpage_transport import InPageFetchTransport
 from ..core.ritmo import Ritmo
 from ..core.session_store import SessionStore
+
+#: Instalado via `BrowserContext.add_init_script`, roda antes de qualquer script da
+#: página. Adaptado do TaxMap (`jusbr.py:_JUSBR_API_HOOK_JS`): guarda em
+#: `window.__pdpjToken` o valor de `Authorization` que o próprio app anexar em
+#: `fetch`/`XMLHttpRequest` — nunca lê nem adivinha onde o app guarda o token, só
+#: observa o que ele mesmo manda numa requisição real.
+HOOK_CAPTURA_BEARER_JS = r"""
+(function(){
+  if (window.__pdpjHook) return;
+  window.__pdpjHook = true;
+  window.__pdpjToken = null;
+  function guarda(v){
+    try{
+      if (v && /^bearer\s+/i.test(v)) {
+        window.__pdpjToken = String(v).replace(/^bearer\s+/i, '').trim();
+      }
+    }catch(e){}
+  }
+  var of = window.fetch;
+  if (of) {
+    window.fetch = function(input, init){
+      try{
+        var h = (init && init.headers) || (input && input.headers);
+        if (h){
+          if (h.get) guarda(h.get('authorization') || h.get('Authorization'));
+          else guarda(h['authorization'] || h['Authorization']);
+        }
+      }catch(e){}
+      return of.apply(this, arguments);
+    };
+  }
+  var os = XMLHttpRequest.prototype.setRequestHeader;
+  XMLHttpRequest.prototype.setRequestHeader = function(k, v){
+    try{ if (String(k).toLowerCase() === 'authorization') guarda(v); }catch(e){}
+    return os.apply(this, arguments);
+  };
+})();
+"""
 
 _PADRAO_TOKEN = re.compile(r"token|jwt", re.IGNORECASE)
 
@@ -193,3 +256,103 @@ def _fecha_ritmo(
         await ritmo.aguardar(tribunal, credencial_id)
 
     return aguardar
+
+
+# ---------------------------------------------------------------------------
+# Hook de captura passiva (ver docstring do módulo, seção "PDPJ nacional")
+# ---------------------------------------------------------------------------
+
+
+class _ContextoComHookDeToken:
+    """`ContextoAutenticado` cujo "estado" é o valor capturado pelo hook, não o
+    storage_state real do browser. Existe só para reaproveitar o laço de
+    espera/prazo/sondagem de `Handshake.capturar` sem duplicá-lo aqui."""
+
+    def __init__(self, pagina: Any) -> None:
+        self._pagina = pagina
+
+    async def storage_state(self) -> Mapping[str, Any]:
+        token = await self._pagina.evaluate("() => window.__pdpjToken")
+        return {"token_capturado": token}
+
+
+def criar_montador_via_hook(tribunal: str, pagina: Any) -> MontadorSessao:
+    """Monta a `Session` a partir do token que o hook capturou (não de cookie nem
+    `localStorage` — ver `criar_montador` para essa outra estratégia).
+
+    `expira_em` vem do próprio JWT (`exp`), como o resto do projeto já faz —
+    agendamento de renovação, nunca prova de legitimidade (a prova é a sonda).
+    """
+
+    def montar(estado: Mapping[str, Any], credencial: Credencial) -> Session:
+        bruto = estado.get("token_capturado")
+        token = bruto if isinstance(bruto, str) and bruto else None
+        return Session(
+            credencial=credencial,
+            tribunal=tribunal,
+            token=token,
+            contexto_browser=pagina,
+            expira_em=expira_em_do_jwt(token) if token else None,
+        )
+
+    return montar
+
+
+async def conectar_chrome_existente(cdp_url: str) -> tuple[Any, Any]:
+    """Anexa a um Chrome já aberto e autenticado pelo titular
+    (`chrome --remote-debugging-port=9222`, aberto e logado por fora deste processo).
+
+    Devolve `(playwright, browser)`. **Nunca** chamar `browser.close()` no valor
+    devolvido — é o Chrome do titular, não um browser descartável do projeto; só
+    `playwright.stop()` é seguro (encerra o driver do Playwright, não o Chrome).
+    Mesma regra do TaxMap (`jusbr.py`: "del driver # NÃO fecha o Chrome do usuário").
+    """
+    from playwright.async_api import async_playwright
+
+    pw = await async_playwright().start()
+    browser = await pw.chromium.connect_over_cdp(cdp_url)
+    return pw, browser
+
+
+async def executar_handshake_com_hook(
+    *,
+    tribunal: str,
+    origem: str,
+    credencial: Credencial,
+    cdp_url: str,
+    url_navegacao: str,
+    url_sonda: str,
+    store: SessionStore,
+    ritmo: Ritmo,
+    intervalo: float = 2.0,
+    prazo: float = 60.0,
+    timeout_sonda: float = 30.0,
+) -> tuple[Session, Any, Any, Any]:
+    """Anexa ao Chrome real do titular, instala o hook de captura e espera o
+    próprio app revelar o Bearer numa requisição real dele.
+
+    Devolve `(sessao, contexto, browser, playwright)`. `browser` é o Chrome do
+    titular (ver `conectar_chrome_existente` sobre nunca fechá-lo); `playwright` é
+    só o driver, seguro de parar quando terminar.
+
+    Pré-condição: o titular já autenticou nesse Chrome antes de rodar isto (login é
+    ato do titular, ADR 003/004/007 — este runner não abre tela de login nenhuma).
+    """
+    pw, browser = await conectar_chrome_existente(cdp_url)
+    contexto = browser.contexts[0] if browser.contexts else await browser.new_context()
+    await contexto.add_init_script(HOOK_CAPTURA_BEARER_JS)
+    pagina = contexto.pages[0] if contexto.pages else await contexto.new_page()
+    await pagina.goto(url_navegacao)
+
+    handshake = Handshake(
+        tribunal,
+        store=store,
+        sonda=criar_sonda(origem, credencial.id, url_sonda, timeout=timeout_sonda),
+        montar_sessao=criar_montador_via_hook(tribunal, pagina),
+        intervalo=intervalo,
+        prazo=prazo,
+        antes_de_sondar=_fecha_ritmo(ritmo, tribunal, credencial.id),
+        timeout_sonda=timeout_sonda,
+    )
+    sessao = await handshake.capturar(_ContextoComHookDeToken(pagina), credencial)
+    return sessao, contexto, browser, pw

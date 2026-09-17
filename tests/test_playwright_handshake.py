@@ -9,6 +9,7 @@ sem o pacote instalado.
 from __future__ import annotations
 
 import base64
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from trt_extractor.core.contracts import Credencial, Session
 from trt_extractor.core.handshake import Veredito
-from trt_extractor.runner.playwright_handshake import criar_montador, criar_sonda
+from trt_extractor.runner.playwright_handshake import (
+    HOOK_CAPTURA_BEARER_JS,
+    _ContextoComHookDeToken,
+    criar_montador,
+    criar_montador_via_hook,
+    criar_sonda,
+)
 
 ORIGEM = "https://portaldeservicos.pdpj.jus.br"
 TRIBUNAL = "TRT4"
@@ -159,3 +166,61 @@ async def test_sonda_sem_pagina_na_sessao_e_indeterminado() -> None:
     sonda = criar_sonda(ORIGEM, CRED.id, f"{ORIGEM}/api/v2/sonda")
     sessao = Session(CRED, TRIBUNAL, token="t", contexto_browser=None)
     assert await sonda(sessao) is Veredito.INDETERMINADO
+
+
+# -- hook de captura passiva (estratégia TaxMap) -------------------------------
+
+
+def _jwt(carga: dict[str, Any]) -> str:
+    corpo = base64.urlsafe_b64encode(json.dumps(carga).encode()).rstrip(b"=").decode()
+    return f"cabecalho.{corpo}.assinatura"
+
+
+class PaginaComToken:
+    """Duplo mínimo: `evaluate` devolve o token que o teste programar, como se o
+    hook JS já tivesse capturado. Não executa JS de verdade."""
+
+    def __init__(self, token: str | None) -> None:
+        self._token = token
+        self.avaliado: list[str] = []
+
+    async def evaluate(self, expressao: str, arg: Any = None) -> Any:
+        self.avaliado.append(expressao)
+        return self._token
+
+
+def test_hook_js_captura_authorization_de_fetch_e_xhr() -> None:
+    """Não roda num browser real (fora de escopo de teste sem rede), mas prova que
+    o hook tem as duas pontas: intercepta `fetch` E `XMLHttpRequest`, e só guarda
+    valor com prefixo Bearer — não guarda um header Authorization qualquer."""
+    assert "window.fetch = function" in HOOK_CAPTURA_BEARER_JS
+    assert "XMLHttpRequest.prototype.setRequestHeader" in HOOK_CAPTURA_BEARER_JS
+    assert "bearer" in HOOK_CAPTURA_BEARER_JS.lower()
+
+
+async def test_contexto_com_hook_le_o_token_capturado() -> None:
+    pagina = PaginaComToken("jwt-capturado")
+    contexto = _ContextoComHookDeToken(pagina)
+    estado = await contexto.storage_state()
+    assert estado == {"token_capturado": "jwt-capturado"}
+    assert pagina.avaliado == ["() => window.__pdpjToken"]
+
+
+async def test_montador_via_hook_sem_token_capturado_ainda() -> None:
+    """Hook instalado mas nenhuma requisição real do app disparou ainda — `None`,
+    nunca um placeholder inventado (o mesmo princípio de `criar_montador`)."""
+    montar = criar_montador_via_hook(TRIBUNAL, PaginaComToken(None))
+    sessao = montar({"token_capturado": None}, CRED)
+    assert sessao.token is None
+    assert sessao.expira_em is None
+
+
+def test_montador_via_hook_calcula_expira_em_do_proprio_jwt() -> None:
+    momento = 1_800_000_000
+    token = _jwt({"exp": momento})
+    montar = criar_montador_via_hook(TRIBUNAL, PaginaComToken(token))
+    sessao = montar({"token_capturado": token}, CRED)
+    assert sessao.token == token
+    assert sessao.expira_em is not None
+    assert sessao.expira_em.timestamp() == momento
+    assert sessao.contexto_browser is not None

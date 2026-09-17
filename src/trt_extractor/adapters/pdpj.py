@@ -79,6 +79,21 @@ def _sigilo(valor: object) -> bool:
     raise PermanenteError("Nivel de sigilo ausente ou nao reconhecido; acesso suspenso")
 
 
+def _retry_after(headers: Mapping[str, str]) -> float | None:
+    """`Retry-After` em segundos, quando o tribunal informa.
+
+    O formato de data HTTP e ignorado de proposito: converte-lo exigiria confiar no
+    relogio do servidor, que nao foi medido. Sem numero valido, quem decide o intervalo
+    e o orquestrador.
+    """
+    minusculo = {nome.lower(): valor for nome, valor in headers.items()}
+    try:
+        segundos = float(minusculo.get("retry-after", ""))
+    except (TypeError, ValueError):
+        return None
+    return segundos if math.isfinite(segundos) and segundos >= 0 else None
+
+
 def _status(resposta: Resposta) -> None:
     if resposta.status == 401:
         raise SessaoExpiradaError("Sessao recusada pelo PDPJ")
@@ -90,7 +105,12 @@ def _status(resposta: Resposta) -> None:
         raise TransienteError("PDPJ temporariamente indisponivel")
     if resposta.status == 206:
         raise TransienteError("Resposta parcial recusada")
-    if resposta.status not in (200, 202):
+    if resposta.status == 202:
+        # 202 e "aceito", nao "pronto" — regra do HTTP, nao suposicao sobre o PDPJ.
+        # O corpo de um 202 e intermediario: aceita-lo arquivaria como peca final algo
+        # que o tribunal ainda nao declarou concluido. Vale para listagem e binario.
+        raise GeracaoPendenteError(_retry_after(resposta.headers))
+    if resposta.status != 200:
         raise PermanenteError("Status PDPJ inesperado")
 
 
@@ -99,6 +119,22 @@ def _json(corpo: bytes) -> dict[str, Any]:
         valor = json.loads(corpo)
     except (ValueError, UnicodeError):
         raise PermanenteError("JSON PDPJ invalido") from None
+    return _objeto(valor)
+
+
+def _processo_json(corpo: bytes) -> dict[str, Any]:
+    """Como `_json`, mas para o endpoint de processo: medido ao vivo em 2026-09-17
+    (docs/execucao/validacao-24-trts-2026-09-17.md) que o PDPJ nacional devolve uma
+    lista JSON de um item, não um objeto solto. Lista de tamanho diferente de 1 é
+    ambígua — melhor falhar alto que escolher um item sem critério."""
+    try:
+        valor = json.loads(corpo)
+    except (ValueError, UnicodeError):
+        raise PermanenteError("JSON PDPJ invalido") from None
+    if isinstance(valor, list):
+        if len(valor) != 1:
+            raise PermanenteError("Lista de processos ambigua (esperado 1 item)")
+        valor = valor[0]
     return _objeto(valor)
 
 
@@ -198,10 +234,13 @@ class PdpjAdapter:
         data = doc.get("dataHoraJuntada")
         juntado_em = None
         if data is not None:
+            # Medido ao vivo em 2026-09-17: o PDPJ nacional manda datetime SEM
+            # offset ("2026-09-01T00:24:36.704938"), nao só com offset como os
+            # testes sintéticos assumiam. Exigir offset aqui rejeitava toda peça
+            # real. `juntado_em` é sinal de ordenação/classificação, não usado em
+            # comparação com relógio — naive serve.
             try:
                 juntado_em = datetime.fromisoformat(data)
-                if juntado_em.utcoffset() is None:
-                    raise ValueError
             except (TypeError, ValueError):
                 raise PermanenteError("Data de juntada invalida") from None
         nome = doc.get("nome")
@@ -240,7 +279,7 @@ class PdpjAdapter:
             session, "GET", f"{BASE_URL}/processos/{numero_cnj}"
         )
         _status(resposta)
-        processo = _json(resposta.corpo)
+        processo = _processo_json(resposta.corpo)
         if "processo" in processo:
             processo = _objeto(processo["processo"])
         if _sigilo(processo.get("nivelSigilo")):
@@ -256,6 +295,12 @@ class PdpjAdapter:
             raise PermanenteError("Lista de tramitacoes invalida")
         candidatas = [atual, *candidatas] if atual is not None else candidatas
         encontrados: dict[str, DocumentoRef] = {}
+        # Dono de cada binario. A rota e /documentos/{uuid}/binario e a evidencia H1
+        # NAO diz se esse uuid e o idOrigem ou o idCodex (lacuna L14), entao exigir
+        # igualdade com idOrigem seria inventar semantica. O que da para provar sem
+        # medicao nova e mais fraco e suficiente: dois documentos distintos disputando
+        # um mesmo binario so pode terminar com os mesmos bytes atribuidos a duas pecas.
+        binarios: dict[str, str] = {}
         grau_encontrado = False
         for candidata in candidatas:
             tramitacao = _objeto(candidata)
@@ -280,6 +325,10 @@ class PdpjAdapter:
                     raise PermanenteError(
                         "Referencias divergentes para o mesmo documento"
                     )
+                if doc.href_binario is not None:
+                    dono = binarios.setdefault(doc.href_binario, doc.id_origem)
+                    if dono != doc.id_origem:
+                        raise PermanenteError("Dois documentos disputam o mesmo binario")
                 encontrados[doc.id_origem] = doc
         if not grau_encontrado:
             raise InexistenteError("Grau solicitado ausente")
@@ -395,13 +444,6 @@ class PdpjAdapter:
         if corpo.lstrip().startswith(b"{"):
             valor = _json(corpo)
             if self._geracao is not None and self._geracao(valor):
-                tentar = None
-                try:
-                    segundos = float(headers.get("retry-after", ""))
-                    if math.isfinite(segundos) and segundos >= 0:
-                        tentar = segundos
-                except ValueError:
-                    pass
-                raise GeracaoPendenteError(tentar)
+                raise GeracaoPendenteError(_retry_after(headers))
             raise PermanenteError("JSON de binario nao reconhecido; L2 nao confirmado")
         raise PermanenteError("Conteudo de binario inesperado")

@@ -146,3 +146,56 @@ PDPJ nacional. **Continua NÃO PROVADO**: usar esse token para de fato rodar
 
 Nível E passa de **BLOQUEADO** para **FORTEMENTE INDICADO** (mecanismo provado,
 integração fim-a-fim ainda não).
+
+---
+
+## Adendo 2026-09-17 (terceira sessão): pipeline real fim-a-fim PROVADO
+
+Com o token capturado (adendo anterior), liguei o pipeline Python de verdade
+(`PdpjAdapter` + `InPageFetchTransport`, sessão com token real, TRT4, mesmo processo
+público usado na validação original) e apareceram dois bugs reais — o adapter nunca
+tinha rodado contra a API de verdade, só contra fixtures sintéticas medidas por
+inferência.
+
+### Bugs reais encontrados e corrigidos
+
+1. **`GET /processos/{cnj}` devolve lista JSON de 1 item, não objeto solto.**
+   `list_documents` assumia objeto direto; toda chamada real falhava com "Objeto
+   PDPJ ausente ou invalido". Corrigido: `_processo_json` (pdpj.py) desembrulha lista
+   de tamanho 1, rejeita lista de outro tamanho como ambígua. Teste de regressão:
+   `test_accepts_process_wrapped_in_single_item_list`,
+   `test_rejects_process_list_with_more_than_one_item`.
+
+2. **`dataHoraJuntada` real não tem offset de fuso** (`"2026-09-01T00:24:36.704938"`,
+   não `"...-03:00"`). O código exigia `utcoffset() is not None` — suposição nunca
+   medida, sem justificativa registrada em comentário. Toda peça real era rejeitada
+   com "Data de juntada invalida". Corrigido: aceita naive também (`juntado_em` é
+   sinal de ordenação, nunca comparado com relógio). Teste de regressão:
+   `test_accepts_naive_juntada_datetime_without_offset`.
+
+3. **`grau` real é objeto `{"sigla": "G1", "nome": "1º Grau", "numero": 1}`**, não
+   string solta como as fixtures assumiam. Não é bug do adapter — `grau_mapper` é
+   injetável de propósito porque esse formato nunca tinha sido medido. Resolvido no
+   `grau_mapper` do chamador (`numero: 1|2 -> Grau.PRIMEIRO|SEGUNDO`), sem mudança em
+   `pdpj.py`. Fica registrado aqui para quem for escrever o `grau_mapper` de produção.
+
+4. **`tipo` real não tem chave `"codigo"`** (`{"nome": "Documento Diverso",
+   "idCodex": ..., "idOrigem": ...}`), então `tipo_pje` fica `None` para documentos
+   reais — a classificação por `tipos_por_codigo` (`codigo -> TipoDocumento`) não
+   tem o que casar. **Não corrigido nesta rodada** — é decisão de classificação
+   (usar `idCodex`? `nome`? outro campo?), não um bug de parsing. Fica como próxima
+   prioridade de investigação, não como conserto silencioso.
+
+### Resultado do pipeline real (TRT4, processo público da validação original)
+
+- `list_documents`: **22 documentos reais retornados**, sessão real, sem tratamento
+  especial de tribunal.
+- `request_download` → `poll_download` → `fetch_artifact`: binário real baixado —
+  **321.713 bytes, assinatura `%PDF-` válida**, sha256 calculado e conferido no
+  `LocalCASStorage`.
+
+**Isso PROVA nível D (binário) e nível E (pipeline completo) contra o PDPJ nacional
+real**, usando o código de produção do projeto (não UI manual, não ponte externa).
+Único ponto ainda não resolvido: qual campo real usar para classificar tipo de
+documento (item 4 acima) — sem isso, a seleção de classes-alvo (petição inicial,
+sentença, acórdão, acordo, laudo) continua sem sinal do PJe neste processo de amostra.

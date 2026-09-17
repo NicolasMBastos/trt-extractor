@@ -86,6 +86,14 @@ def process(*documents: dict[str, Any], **overrides: Any) -> Resposta:
     return Resposta(200, json.dumps(payload).encode())
 
 
+def process_em_lista(*documents: dict[str, Any], **overrides: Any) -> Resposta:
+    """Formato medido ao vivo em 2026-09-17 no PDPJ nacional: o endpoint de
+    processo devolve uma lista JSON de um item, não o objeto solto que `process()`
+    simula. Ver docs/execucao/validacao-24-trts-2026-09-17.md."""
+    bare = json.loads(process(*documents, **overrides).corpo)
+    return Resposta(200, json.dumps([bare]).encode())
+
+
 def adapter(transport: FakeTransport, **kwargs: Any) -> PdpjAdapter:
     return PdpjAdapter(
         transport,
@@ -138,6 +146,18 @@ async def test_maps_public_and_restricted_without_dropping_refs() -> None:
     assert transport.calls == [f"{BASE_URL}/processos/{CNJ}"]
 
 
+async def test_accepts_naive_juntada_datetime_without_offset() -> None:
+    """Regressão: medido ao vivo que o PDPJ nacional manda dataHoraJuntada sem
+    offset ("2026-09-01T00:24:36.704938"). Exigir offset rejeitava toda peça real
+    com PermanenteError mesmo com sessão e grau corretos."""
+    transport = FakeTransport(
+        process(wire_document(dataHoraJuntada="2026-09-01T00:24:36.704938"))
+    )
+    docs = await adapter(transport).list_documents(SESSION, CNJ, Grau.PRIMEIRO)
+    assert docs[0].juntado_em == datetime(2026, 9, 1, 0, 24, 36, 704938)
+    assert docs[0].juntado_em.utcoffset() is None
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
@@ -188,6 +208,23 @@ async def test_selects_requested_grade_without_current_grade_assumption() -> Non
     docs = await adapter(transport).list_documents(SESSION, CNJ, Grau.SEGUNDO)
     assert [doc.id_origem for doc in docs] == ["appeal"]
     assert docs[0].grau == Grau.SEGUNDO
+
+
+async def test_accepts_process_wrapped_in_single_item_list() -> None:
+    """Regressão: medido ao vivo que o PDPJ nacional embrulha a resposta do
+    processo numa lista de 1 item, não um objeto solto — sem isso o pipeline real
+    falhava com "Objeto PDPJ ausente ou invalido" mesmo com sessão válida."""
+    transport = FakeTransport(process_em_lista(wire_document()))
+    docs = await adapter(transport).list_documents(SESSION, CNJ, Grau.PRIMEIRO)
+    assert [doc.id_origem for doc in docs] == ["synthetic-doc-1"]
+
+
+async def test_rejects_process_list_with_more_than_one_item() -> None:
+    """Lista com != 1 item é ambígua — falha alto em vez de escolher um item."""
+    payload = json.loads(process(wire_document()).corpo)
+    resposta = Resposta(200, json.dumps([payload, payload]).encode())
+    with pytest.raises(PermanenteError, match="ambigua"):
+        await adapter(FakeTransport(resposta)).list_documents(SESSION, CNJ, Grau.PRIMEIRO)
 
 
 async def test_no_unmeasured_grade_default() -> None:

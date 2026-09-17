@@ -16,17 +16,18 @@ vazaria para todos os adapters. Ver docs/decisions/002.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Iterable, Mapping, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 # ---------------------------------------------------------------------------
 # Vocabulário
 # ---------------------------------------------------------------------------
 
 
-class TipoDocumento(str, Enum):
+class TipoDocumento(str, Enum):  # noqa: UP042
     """As cinco classes-alvo. `OUTRO` é o que o classificador rejeita."""
 
     PETICAO_INICIAL = "peticao_inicial"
@@ -37,7 +38,7 @@ class TipoDocumento(str, Enum):
     OUTRO = "outro"
 
 
-class Grau(str, Enum):
+class Grau(str, Enum):  # noqa: UP042
     PRIMEIRO = "1"
     SEGUNDO = "2"
     # TST/instância extraordinária entra como `SUPERIOR` para não colidir com o
@@ -45,7 +46,7 @@ class Grau(str, Enum):
     SUPERIOR = "S"
 
 
-class EstadoJob(str, Enum):
+class EstadoJob(str, Enum):  # noqa: UP042
     """Máquina de estados de `(numero_cnj, grau, tipo_documento)`.
 
     Terminais: ARQUIVADO, SIGILOSO, INEXISTENTE, FALHA_PERMANENTE.
@@ -65,19 +66,19 @@ class EstadoJob(str, Enum):
     FALHA_PERMANENTE = "FALHA_PERMANENTE"
 
 
-class Via(str, Enum):
+class Via(str, Enum):  # noqa: UP042
     """Via de aquisição. Ordem de preferência decrescente.
 
     A ordem difere do briefing: `PDPJ_API` é nacional e antecede o MNI, que é por
     tribunal. Justificativa em docs/arquitetura.md §2 (D1).
     """
 
-    PDPJ_API = "pdpj_api"          # 0 — nacional, api/v2
-    MNI_SOAP = "mni_soap"          # 1 — por tribunal
+    PDPJ_API = "pdpj_api"  # 0 — nacional, api/v2
+    MNI_SOAP = "mni_soap"  # 1 — por tribunal
     AUTOS_FILTRADO = "autos_filtrado"  # 2 — "Download autos" com filtro de tipo
     DOC_INDIVIDUAL = "doc_individual"  # 3 — peça a peça
-    BROWSER = "browser"            # 4 — Playwright no navegador oficial
-    LEGADO = "legado"              # 5 — visualizadores legados (VDOC etc.)
+    BROWSER = "browser"  # 4 — Playwright no navegador oficial
+    LEGADO = "legado"  # 5 — visualizadores legados (VDOC etc.)
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +260,7 @@ class PedidoDownload:
     opaco: Mapping[str, Any] = field(default_factory=dict)
 
 
-class StatusDownload(str, Enum):
+class StatusDownload(str, Enum):  # noqa: UP042
     GERANDO = "gerando"
     PRONTO = "pronto"
     FALHOU = "falhou"
@@ -353,7 +354,7 @@ class TribunalAdapter(Protocol):
         """Pede o download, filtrado por tipo. Não bloqueia.
 
         **Sempre filtrar por tipo.** Nunca pedir autos integrais para filtrar depois:
-        corta 70–90% de volume, de tempo de geração e de pegada de tráfego.
+        corta 70-90% de volume, de tempo de geração e de pegada de tráfego.
 
         Quando a via for síncrona (MNI, ou API que devolve binário direto), devolve
         um `PedidoDownload` já resolvido — `poll_download` retorna PRONTO na
@@ -393,7 +394,7 @@ class Storage(Protocol):
     """Content-addressed por sha256: uma cópia física, N referências lógicas.
 
     Resolve o dedup entre 1º e 2º grau sem lógica extra. `LocalCASStorage` cobre
-    as fases 0–4; `S3Storage` entra na fase 5. Ver docs/arquitetura.md §2 (D5).
+    as fases 0-4; `S3Storage` entra na fase 5. Ver docs/arquitetura.md §2 (D5).
     """
 
     async def put(self, artefato: Artefato) -> str:
@@ -410,7 +411,7 @@ class Storage(Protocol):
 # ---------------------------------------------------------------------------
 
 
-class MetodoClassificacao(str, Enum):
+class MetodoClassificacao(str, Enum):  # noqa: UP042
     """Camadas do classificador, na ordem em que são tentadas."""
 
     TIPO_PJE = "tipo_pje"

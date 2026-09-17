@@ -9,13 +9,16 @@ guardar. Este não é um projeto de metadados.
 Acesso por certificado digital próprio, legítimo, que já seria feito manualmente. O
 objetivo é volume e velocidade, não acesso a algo indisponível.
 
-> **Estado: fase 0 (reconhecimento).** Nenhum código de extração escrito, por decisão.
-> Ver `docs/fase-0/plano.md`.
+> **Estado: base PDPJ em implementação.** Via nacional, transporte HTTP/2 e CAS foram
+> comprovados; adapter, transporte e pool de sessão têm testes locais sem rede judicial.
 
 ## Comece por aqui
 
 | Documento | O que é |
 |---|---|
+| [`Continua_codex.md`](Continua_codex.md) | **Comece aqui.** O mapa do projeto: contexto, o que está provado, o que falta, roadmap |
+| [`docs/execucao/handoff-orquestrador.md`](docs/execucao/handoff-orquestrador.md) | **Se você vai orquestrar agentes:** estado do canvas, quais funcionam, armadilhas de ambiente, contrato de tarefa |
+| [`docs/canais-publicos/`](docs/canais-publicos/) | O que dá para extrair **sem autenticar** — medido, com os percentuais honestos por classe |
 | [`docs/arquitetura.md`](docs/arquitetura.md) | A arquitetura, e onde ela diverge do briefing original |
 | [`docs/fase-0/plano.md`](docs/fase-0/plano.md) | Checklist executável da fase 0 + **3 perguntas para o dono do projeto** |
 | [`docs/decisions/`](docs/decisions/) | Registros de decisão arquitetural |
@@ -31,19 +34,16 @@ src/trt_extractor/
   storage/              content-addressed por sha256
   classify/             tipo_pje → posição no fluxo → keywords → LLM
 migrations/001_inicial.sql   esquema + máquina de estados validada por trigger
-config/keywords.yaml         VAZIO por design — ver abaixo
-capabilities.yaml            24 TRTs, todos `nao_testado`
+config/keywords.yaml         pesos documentados; validação de fase 4 ainda pendente
+capabilities.yaml            TRT4 parcial; demais TRTs não testados
 research/har/                HARs sanitizados da fase 0
 ```
 
-## As duas perguntas que travam o projeto
+## Caminho nacional comprovado
 
-Nenhuma linha de adapter antes destas duas respostas (`docs/arquitetura.md` §4):
-
-- **H1** — a API nacional `portaldeservicos.pdpj.jus.br/api/v2` entrega o **binário** do
-  documento, ou só a lista? Se entregar, 24 integrações viram 1.
-- **H2** — o WAF rejeita `httpx` portando o mesmo Bearer que funciona via `fetch` dentro
-  da página? Se rejeitar, o substrato de volume não é HTTP paralelo.
+H1 e H2 foram respondidas na evidência PDPJ: a API nacional entrega listagem e binário por
+`hrefBinario`; `httpx` com HTTP/2 e User-Agent estável recebe 200. HTTP/1.1 sem UA recebeu
+403. Os requisitos estão aplicados no transporte.
 
 ## Desenvolvimento
 
@@ -57,13 +57,30 @@ pytest -m "not rede and not portao"   # suíte normal — tem que ficar verde
 pytest -m "portao"                    # portões de fase — vermelho de propósito
 ```
 
-`-m "not rede"` é obrigatório: **zero teste que bate em tribunal de produção**.
+`-m "not rede and not portao"` é obrigatório para a suíte normal: **zero teste que bate
+em tribunal de produção**. O bloqueio de rede também é aplicado localmente.
 
-### `config/keywords.yaml` está vazio, e o teste falha
+### Smoke da migration
 
-É proposital. As palavras-chave são fornecidas pelo dono do projeto —
-`tests/test_config.py::test_keywords_preenchido` é o portão que impede a fase 4 de ser
-declarada pronta com o classificador vazio. Não preencher para fazer passar.
+O PostgreSQL de desenvolvimento é exclusivo para este smoke, exposto apenas em
+`127.0.0.1:54329` e armazenado em `tmpfs`; os dados desaparecem quando o container é
+removido. As credenciais no `docker-compose.yml` são públicas e só valem nesse ambiente.
+
+```powershell
+docker compose up -d --wait
+$env:TRT_EXTRACTOR_RUN_LOCAL_DB_SMOKE = "1"
+pytest tests/test_migration_smoke.py
+docker compose down
+```
+
+O teste permanece desabilitado sem `TRT_EXTRACTOR_RUN_LOCAL_DB_SMOKE=1`. Quando habilitado,
+falha com instrução objetiva se o PostgreSQL local não estiver disponível. Ele aplica
+`migrations/001_inicial.sql` sem modificá-la.
+
+### Classificação
+
+`config/keywords.yaml` contém pesos de produção e derivados documentados. A fase 4 segue
+pendente de validação contra amostra rotulada e da confirmação de `hrefTexto`.
 
 ## Segurança e conformidade
 

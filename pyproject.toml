@@ -41,7 +41,7 @@ packages = ["src/trt_extractor"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-q --strict-markers"
+addopts = "-q --strict-markers --block-network --record-mode=none"
 markers = [
     # Marcador para o que toca rede real. NUNCA roda no CI — o briefing é
     # explícito: zero teste que bate em tribunal de produção.
@@ -58,5 +58,10 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.mypy]
 python_version = "3.12"
+# O alvo é Windows (a máquina do certificado; ver arquitetura §2 D6). Fixar aqui faz
+# o mypy do CI, que roda em ubuntu-latest, analisar os mesmos ramos que o da máquina
+# de desenvolvimento — sem isso, `ctypes.windll` em core/session_store.py exigiria
+# `type: ignore` no Linux e acusaria ignore inútil no Windows.
+platform = "win32"
 strict = true
 files = ["src/trt_extractor"]

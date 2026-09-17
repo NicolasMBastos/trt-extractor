@@ -1,0 +1,65 @@
+{
+  "nivelSigilo": 0,
+  "siglaTribunal": "TRT4",
+  "numeroProcesso": "0000000-00.2026.5.04.0000",
+  "tramitacaoAtual": {
+    "grau": "1",
+    "documentos": [
+      {
+        "idCodex": "synthetic-1-codex",
+        "idOrigem": "synthetic-1",
+        "nome": "Peticao Inicial.pdf",
+        "nivelSigilo": "PUBLICO",
+        "tipo": {"codigo": 202, "nome": "Peticao Inicial"},
+        "sequencia": 1,
+        "dataHoraJuntada": "2026-01-02T03:04:05-03:00",
+        "hrefBinario": "/processos/0000000-00.2026.5.04.0000/documentos/synthetic-1/binario",
+        "hrefTexto": "/processos/0000000-00.2026.5.04.0000/documentos/synthetic-1/texto"
+      },
+      {
+        "idCodex": "synthetic-2-codex",
+        "idOrigem": "synthetic-2",
+        "nome": "Sentenca sintetica.pdf",
+        "nivelSigilo": "PUBLICO",
+        "tipo": {"codigo": 990001, "nome": "SENTENCA_SINTETICA"},
+        "sequencia": 2,
+        "dataHoraJuntada": "2026-01-03T03:04:05-03:00",
+        "hrefBinario": "/processos/0000000-00.2026.5.04.0000/documentos/synthetic-2/binario",
+        "hrefTexto": "/processos/0000000-00.2026.5.04.0000/documentos/synthetic-2/texto"
+      },
+      {
+        "idCodex": "synthetic-3-codex",
+        "idOrigem": "synthetic-3",
+        "nome": "Acordao sintetico.pdf",
+        "nivelSigilo": "PUBLICO",
+        "tipo": {"codigo": 990002, "nome": "ACORDAO_SINTETICO"},
+        "sequencia": 3,
+        "dataHoraJuntada": "2026-01-04T03:04:05-03:00",
+        "hrefBinario": "/processos/0000000-00.2026.5.04.0000/documentos/synthetic-3/binario",
+        "hrefTexto": "/processos/0000000-00.2026.5.04.0000/documentos/synthetic-3/texto"
+      },
+      {
+        "idCodex": "synthetic-4-codex",
+        "idOrigem": "synthetic-4",
+        "nome": "Certidao sintetica.pdf",
+        "nivelSigilo": "PUBLICO",
+        "tipo": {"codigo": 402, "nome": "CERTIDAO"},
+        "sequencia": 4,
+        "dataHoraJuntada": "2026-01-05T03:04:05-03:00",
+        "hrefBinario": "/processos/0000000-00.2026.5.04.0000/documentos/synthetic-4/binario",
+        "hrefTexto": "/processos/0000000-00.2026.5.04.0000/documentos/synthetic-4/texto"
+      },
+      {
+        "idCodex": "synthetic-5-codex",
+        "idOrigem": "synthetic-5",
+        "nome": "Peticao Inicial restrita sintetica.pdf",
+        "nivelSigilo": "SIGILOSO",
+        "tipo": {"codigo": 202, "nome": "Peticao Inicial"},
+        "sequencia": 5,
+        "dataHoraJuntada": "2026-01-06T03:04:05-03:00",
+        "hrefBinario": "/processos/0000000-00.2026.5.04.0000/documentos/synthetic-5/binario",
+        "hrefTexto": "/processos/0000000-00.2026.5.04.0000/documentos/synthetic-5/texto"
+      }
+    ]
+  }
+}

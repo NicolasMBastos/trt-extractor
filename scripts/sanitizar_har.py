@@ -169,9 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     limpo, contagem = sanitizar(har)
 
     destino = caminho_saida(args.entrada, args.saida)
-    destino.write_text(
-        json.dumps(limpo, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    destino.write_text(json.dumps(limpo, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(f"sanitizado: {destino}")
     if contagem:

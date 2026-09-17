@@ -263,3 +263,39 @@ Nível de classificação real (que fração das 5 classes-alvo tem sinal determ
 de `tipo_pje`): **3 de 5 PROVADAS** (petição inicial, sentença, acórdão). Acordo e
 laudo/perícia continuam sem código próprio medido — precisam de amostra com esses
 documentos presentes, ou de investigação por outro sinal (nome/posição no fluxo).
+
+---
+
+## Adendo 2026-09-17 (quinta sessão): acordo e laudo — classificação 5/5 fechada
+
+Busquei candidatos com "acordo" via DataJud (`movimentos.nome` contendo
+"Homologação de Transação Extrajudicial"/"Acordo") em 12 tribunais — todos
+retornaram candidatos. Testei 6 (TRT1, 5, 8, 9, 17, 20) via pipeline real,
+respeitando ritmo (12s entre tribunais, sem insistir).
+
+**Achado:** TRT17, processo `0000340-76.2026.5.17.0181` — documento com
+`tipo.codigo=11`, `tipo.nome="Acordo"`. Confirma classe **ACORDO** com código
+próprio, estável.
+
+**Laudo pericial** já tinha 2 ocorrências reais confirmadas na sessão anterior
+(TRT9, TRT12: `"Apresentação de Laudo Pericial"`, sempre sem `codigo`, só `nome`).
+Não vale a pena investir mais rodadas nisso — o padrão já é consistente (2
+ocorrências, mesmo nome exato, dois tribunais diferentes) e o mecanismo de
+fallback por nome (`_documento`) já cobre esse caso.
+
+### Mapa final de classificação (5/5 classes-alvo)
+
+| Classe | Chave em `TIPOS_POR_CODIGO_MEDIDO` | Fonte |
+|---|---|---|
+| `ACORDO` | `"11"` (código) | TRT17, 1 ocorrência |
+| `PETICAO_INICIAL` | `"202"` (código) | 8+ tribunais |
+| `SENTENCA` | `"550"` (código) | 8+ tribunais |
+| `ACORDAO` | `"14442"` (código) | 8+ tribunais |
+| `LAUDO_PERICIA` | `"Apresentação de Laudo Pericial"` (nome, sem código) | TRT9, TRT12 |
+
+**Status:** classificação por `tipo_pje` agora cobre as 5 classes-alvo com
+evidência real, medida ao vivo — nenhuma delas é suposição. `ACORDO` e
+`LAUDO_PERICIA` têm amostra pequena (1 e 2 ocorrências) comparado a
+`PETICAO_INICIAL`/`SENTENCA`/`ACORDAO` (8+ tribunais, milhares de documentos) —
+**fortemente indicado**, não tão robusto quanto os outros três, mas já é
+evidência real, não inferência.

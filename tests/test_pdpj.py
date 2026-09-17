@@ -149,6 +149,7 @@ async def test_maps_public_and_restricted_without_dropping_refs() -> None:
 @pytest.mark.parametrize(
     ("codigo", "esperado"),
     [
+        ("11", TipoDocumento.ACORDO),
         ("202", TipoDocumento.PETICAO_INICIAL),
         ("550", TipoDocumento.SENTENCA),
         ("14442", TipoDocumento.ACORDAO),
@@ -157,9 +158,9 @@ async def test_maps_public_and_restricted_without_dropping_refs() -> None:
 async def test_classificador_tipo_pje_usa_mapa_medido_por_default(
     codigo: str, esperado: TipoDocumento
 ) -> None:
-    """Medido ao vivo em 2026-09-17 contra 8 tribunais reais (>2000 documentos):
-    202=Petição Inicial, 550=Sentença, 14442=Acórdão. Sem tipos_por_codigo
-    explícito, o adapter já vem com esse mapa por default."""
+    """Medido ao vivo em 2026-09-17 contra >10 tribunais reais (milhares de
+    documentos): 11=Acordo, 202=Petição Inicial, 550=Sentença, 14442=Acórdão. Sem
+    tipos_por_codigo explícito, o adapter já vem com esse mapa por default."""
     from trt_extractor.adapters.pdpj import TIPOS_POR_CODIGO_MEDIDO
     from trt_extractor.classify.tipo_pje import ClassificadorTipoPje
 
@@ -170,6 +171,24 @@ async def test_classificador_tipo_pje_usa_mapa_medido_por_default(
     classificador = ClassificadorTipoPje(TIPOS_POR_CODIGO_MEDIDO)
     resultado = await classificador.classificar(docs[0], None)
     assert resultado.tipo == esperado
+
+
+async def test_classificador_tipo_pje_reconhece_laudo_pericial_por_nome() -> None:
+    """Medido ao vivo: "Apresentação de Laudo Pericial" nunca teve código nesta
+    amostra (TRT9, TRT12). Cai para o nome (`_documento`), e o mapa default
+    reconhece essa string exata como LAUDO_PERICIA."""
+    from trt_extractor.adapters.pdpj import TIPOS_POR_CODIGO_MEDIDO
+    from trt_extractor.classify.tipo_pje import ClassificadorTipoPje
+
+    transport = FakeTransport(
+        process(wire_document(tipo={"nome": "Apresentação de Laudo Pericial"}))
+    )
+    subject = adapter(transport)
+    docs = await subject.list_documents(SESSION, CNJ, Grau.PRIMEIRO)
+    assert docs[0].tipo_pje == "Apresentação de Laudo Pericial"
+    classificador = ClassificadorTipoPje(TIPOS_POR_CODIGO_MEDIDO)
+    resultado = await classificador.classificar(docs[0], None)
+    assert resultado.tipo == TipoDocumento.LAUDO_PERICIA
 
 
 async def test_tipo_pje_cai_para_nome_quando_sem_codigo() -> None:

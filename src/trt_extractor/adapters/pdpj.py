@@ -138,17 +138,19 @@ def _processo_json(corpo: bytes) -> dict[str, Any]:
     return _objeto(valor)
 
 
-#: Mapeamento código -> classe medido ao vivo em 2026-09-17 contra 8 tribunais
-#: reais (TRT6/7/9/11/12/14/22/23, >2000 documentos inspecionados), registrado em
-#: docs/execucao/validacao-24-trts-2026-09-17.md. Só as 3 classes-alvo com código
-#: numérico estável e inequívoco entram aqui — "acordo" e "laudo" não apareceram
-#: com código próprio nesta amostra (laudo aparece só como
-#: "Apresentação de Laudo Pericial", sem código, resolvido pelo fallback de nome
-#: em `_documento`, não por este mapa).
+#: Mapeamento tipo -> classe medido ao vivo em 2026-09-17 contra >10 tribunais
+#: reais (TRT1/5/6/7/8/9/11/12/14/17/20/22/23, milhares de documentos inspecionados),
+#: registrado em docs/execucao/validacao-24-trts-2026-09-17.md. As chaves numéricas
+#: vêm de `tipo.codigo`; "Apresentação de Laudo Pericial" nunca apareceu com código
+#: nesta amostra — a chave aqui é o próprio nome, porque `_documento` cai para o
+#: nome quando não há código (mesmo mecanismo, mesmo dicionário: o classificador
+#: trata a chave como string opaca, não importa se numérica ou textual).
 TIPOS_POR_CODIGO_MEDIDO: Mapping[str, TipoDocumento] = {
+    "11": TipoDocumento.ACORDO,  # "Acordo"
     "202": TipoDocumento.PETICAO_INICIAL,  # "PETIÇÃO INICIAL"/"Petição Inicial"
     "550": TipoDocumento.SENTENCA,  # "SENTENÇA"/"Sentença"
     "14442": TipoDocumento.ACORDAO,  # "Acórdão"
+    "Apresentação de Laudo Pericial": TipoDocumento.LAUDO_PERICIA,
 }
 
 

@@ -441,6 +441,33 @@ async def test_explicit_synthetic_generation_policy_and_later_pdf() -> None:
     assert len(transport.calls) == 2
 
 
+async def test_upstream_error_envelope_with_http_200_is_transient() -> None:
+    """Regressão: medido ao vivo em 2026-09-17 (TRT1) que o endpoint de binário
+    pode devolver HTTP 200 com um envelope de erro no corpo — {"error", "message",
+    "status": 503, ...} — quando a fonte de dados do tribunal está indisponível.
+    Antes deste fix virava PermanenteError ("L2 nao confirmado"), o que mandava
+    pro dead-letter algo que era, na real, um 503 disfarçado — deveria ter retry."""
+    envelope = {
+        "status": 503,
+        "error": "Service Unavailable",
+        "message": "A fonte de dados TRT1_PJEPG esta temporariamente indisponivel.",
+        "origem": "gateway",
+        "timestamp": "2026-09-17T12:00:00Z",
+        "traceId": "abc123",
+    }
+    transport = FakeTransport(Resposta(200, json.dumps(envelope).encode()))
+    with pytest.raises(TransienteError, match="fonte de dados"):
+        await download(adapter(transport))
+
+
+async def test_json_binario_sem_envelope_de_erro_continua_permanente() -> None:
+    """JSON no corpo que não bate no envelope medido continua PermanenteError —
+    o fix não afrouxa a regra geral, só reconhece o formato real observado."""
+    transport = FakeTransport(Resposta(200, b'{"algo": "diferente"}'))
+    with pytest.raises(PermanenteError, match="L2 nao confirmado"):
+        await download(adapter(transport))
+
+
 @pytest.mark.parametrize(
     "session",
     [

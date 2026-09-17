@@ -114,6 +114,21 @@ def _status(resposta: Resposta) -> None:
         raise PermanenteError("Status PDPJ inesperado")
 
 
+def _e_erro_upstream(valor: Mapping[str, Any]) -> bool:
+    """Medido ao vivo em 2026-09-17 (TRT1): o endpoint de binário pode devolver
+    **HTTP 200** com um envelope de erro no corpo — `{"error", "message", "origem",
+    "status", "timestamp", "traceId"}` — quando a fonte de dados do tribunal (PJe
+    local) está temporariamente indisponível (`status` do envelope visto: 503).
+    `status` aqui é do envelope, não do HTTP; 5xx nele é falha transiente de
+    verdade, não "binário inválido nunca vai funcionar"."""
+    status = valor.get("status")
+    return (
+        {"error", "message", "status"} <= valor.keys()
+        and type(status) is int
+        and 500 <= status < 600
+    )
+
+
 def _json(corpo: bytes) -> dict[str, Any]:
     try:
         valor = json.loads(corpo)
@@ -469,5 +484,10 @@ class PdpjAdapter:
             valor = _json(corpo)
             if self._geracao is not None and self._geracao(valor):
                 raise GeracaoPendenteError(_retry_after(headers))
+            if _e_erro_upstream(valor):
+                raise TransienteError(
+                    "PDPJ reportou fonte de dados do tribunal indisponivel (HTTP 200 "
+                    "com envelope de erro no corpo)"
+                )
             raise PermanenteError("JSON de binario nao reconhecido; L2 nao confirmado")
         raise PermanenteError("Conteudo de binario inesperado")

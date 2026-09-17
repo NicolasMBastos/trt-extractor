@@ -299,3 +299,104 @@ evidência real, medida ao vivo — nenhuma delas é suposição. `ACORDO` e
 `PETICAO_INICIAL`/`SENTENCA`/`ACORDAO` (8+ tribunais, milhares de documentos) —
 **fortemente indicado**, não tão robusto quanto os outros três, mas já é
 evidência real, não inferência.
+
+---
+
+## Adendo 2026-09-17 (sexta sessão): pipeline completo (nível E) nos 24 TRTs
+
+Rodei o pipeline real (`PdpjAdapter` + `InPageFetchTransport`, mesma sessão/token via
+hook) contra os 24 candidatos de vara já validados (nível C), sequencial, pausa de
+15s entre qualquer duas chamadas HTTP (acima do piso de 6 req/min = 10s da matriz),
+parando a linha inteira na primeira ocorrência de bloqueio (403/429) — nenhum
+ocorreu. Duração total: **704,5s (~11,7 min) para 24 tribunais**.
+
+### Resultado
+
+| Status | Quantidade | TRTs |
+|---|---|---|
+| **OK** (list→fetch→validate→hash→store completo) | **22/24** | todos exceto TRT1, TRT22 |
+| Fetch falhou (achado real, ver abaixo) | 1 | TRT1 |
+| Grau inexistente nesta via | 1 | TRT22 (candidato é gabinete/2ª instância; grau 1 não existe pra esse processo — esperado, não é bug) |
+
+**Nível E agora PROVADO em 22 dos 24 TRTs** — PDF real baixado, assinatura válida,
+sha256 calculado e conferido no CAS local, sem tratamento especial por tribunal.
+
+### Latência real medida (24 amostras)
+
+- `list_documents`: média **0,16s**
+- `fetch_artifact` (binário): média **0,43s**
+
+A API nacional é rápida — a latência de rede não é o fator limitante da operação;
+o ritmo (pausas deliberadas) é.
+
+### Achado real: TRT1, "JSON de binário não reconhecido; L2 não confirmado"
+
+O documento escolhido no TRT1 devolveu **JSON no lugar de PDF** no endpoint de
+binário — o código já previa esse caso (`_resposta` em `httpx_transport`/
+`inpage_transport`... na verdade em `pdpj.py:_documento`/`fetch_artifact`) mas sem
+`geracao_pendente` configurado (não passei essa política no script), então virou
+`PermanenteError` em vez de retry. Isso é exatamente o "L2 não confirmado" que o
+código já documentava como não medido — **agora tem uma ocorrência real**, mas
+ainda não o suficiente para confirmar o formato do JSON de geração pendente (não
+investiguei o corpo desta vez, para não estender a sessão). Fica registrado como
+próxima investigação, não como bug corrigido.
+
+### Amostra de artefatos reais (sanitizado — sem conteúdo, só hash/tamanho)
+
+Ver `data/pipeline_24trts_resultado.json` (gitignored) para os 22 sha256 completos.
+Tamanhos entre 53KB e 322KB, todos com assinatura `%PDF-` válida.
+
+---
+
+## Adendo 2026-09-17 (sétima sessão): acordo reforçado + estimativa de throughput
+
+### Acordo: segunda confirmação
+
+Testei mais 5 candidatos com movimento de acordo (TRT13, 14, 16, 23, 24). TRT24
+confirmou `codigo=11, nome="Acordo"` em **3 documentos** do mesmo processo.
+Combinado com TRT17 (sessão anterior), **código 11 = Acordo está confirmado em 2
+tribunais diferentes, 4 ocorrências totais** — evidência bem mais sólida que a
+única ocorrência anterior.
+
+### Estimativa de throughput (prudente, considerando o certificado do titular)
+
+**Medido nesta rodada:** latência real da API — `list_documents` média 0,16s,
+`fetch_artifact` média 0,43s. A rede não é o gargalo; o ritmo deliberado é.
+
+**Teto técnico da matriz atual:** `capabilities.yaml` declara **6 req/min por
+`(tribunal, credencial)`**, uniforme nos 24 TRTs — não é uma estimativa de
+capacidade real medida por tribunal, é o piso conservador que a governança
+(`docs/execucao/governanca-volume.md`) define para tribunal não medido
+individualmente. A governança também deixa explícito: **o limite é por
+`(tribunal, credencial)`, não há teto agregado por soma de tribunais** — não é
+proibido, arquiteturalmente, operar em vários TRTs simultaneamente no teto de cada
+um.
+
+**Por que eu não uso esse teto mesmo assim:** ADR 009 é explícita — o risco real
+não é "ser detectado como robô" (a credencial já é identificável, JWT carrega
+nome/CPF/e-mail do titular), é **um auditor perguntando por que essa credencial
+abriu muitos processos numa tarde**. Esse risco não desaparece por processo estar
+espalhado entre 24 tribunais diferentes — é a mesma pessoa, o mesmo certificado,
+o mesmo dia. Por isso toda medição desta rodada usou pausa de 12-15s **entre
+qualquer duas chamadas, cruzando tribunais**, não 10s por tribunal isolado.
+
+| Cenário | Ritmo | Requisições/hora | Processos/hora* | Status |
+|---|---|---|---|---|
+| Teto técnico da matriz (1 tribunal só, sem pausa extra) | 6 req/min | 360 | ~180 | Nunca testado nesta rodada — não recomendo operar aqui |
+| **Medido nesta rodada** (24 tribunais, pausa 15s entre chamadas) | 4 req/min | 240 | ~120 | **Testado ao vivo, zero bloqueio, 22/24 sucesso** |
+| **Recomendação prudente para início de produção** | 1 processo a cada 2-3 min | ~20-30 | ~20-30 | Não testado em volume sustentado — recomendação, não medição |
+
+*Processos/hora assume 1 documento baixado por processo (2 requisições: list +
+fetch). Buscar múltiplas classes-alvo por processo multiplica requisições
+proporcionalmente (ex.: 3 documentos-alvo = 4 requisições = throughput cai à metade).
+
+**Isso é recomendação minha, não autorização.** Por `governanca-volume.md`: "Nenhum
+limite sobe por analogia, urgência ou sucesso isolado" — qualquer volume sustentado
+em produção precisa de decisão do responsável operacional, com evidência registrada
+em `capabilities.yaml`/`testado_em`, não só o teste desta rodada.
+
+**Recomendação concreta:** começar em produção na faixa prudente (~20-30
+processos/hora, horário comercial, dias úteis — já é o que `Ritmo`/`JanelaOperacional`
+impõem), observar por alguns dias (taxa de erro, resposta do PDPJ, qualquer sinal de
+questionamento), só then considerar subir — com evidência, não por analogia ao
+teste de hoje.

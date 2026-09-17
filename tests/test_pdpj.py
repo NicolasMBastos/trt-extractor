@@ -59,14 +59,18 @@ class FakeTransport:
 
 
 def wire_document(**overrides: Any) -> dict[str, Any]:
+    # O href acompanha o `idOrigem` por padrão: um payload em que dois documentos
+    # compartilham um binário é ambíguo, e o adapter recusa. Quem quiser testar essa
+    # ambiguidade passa `hrefBinario` explicitamente — é o que a faz aparecer no teste.
+    id_origem = overrides.get("idOrigem", "synthetic-doc-1")
     return {
-        "idOrigem": "synthetic-doc-1",
+        "idOrigem": id_origem,
         "nome": "Peticao Inicial.pdf",
         "nivelSigilo": "PUBLICO",
         "tipo": {"codigo": 202},
         "sequencia": 1,
         "dataHoraJuntada": "2026-09-08T10:00:00-03:00",
-        "hrefBinario": f"/processos/{CNJ}/documentos/synthetic-doc-1/binario",
+        "hrefBinario": f"/processos/{CNJ}/documentos/{id_origem}/binario",
         **overrides,
     }
 
@@ -217,7 +221,9 @@ async def test_rejects_inconsistent_process(changes: dict[str, Any]) -> None:
         (403, BloqueioError),
         (404, InexistenteError),
         (429, BloqueioError),
+        (408, TransienteError),
         (500, TransienteError),
+        (502, TransienteError),
         (503, TransienteError),
         (206, TransienteError),
         (302, PermanenteError),
@@ -399,3 +405,51 @@ async def test_restricted_unknown_type_does_not_become_inexistente() -> None:
             documentos=[reference(sigiloso=True, tipo_pje=None)],
         )
     assert not isinstance(error.value, InexistenteError)
+
+
+# -- achados da revisão adversarial L11 (docs/execucao/revisao-adversarial-2026-09-14.md)
+
+
+async def test_accepted_status_is_never_a_ready_binary() -> None:
+    """`202` é aceito-mas-não-concluído, mesmo quando o corpo parece um PDF.
+
+    Achado 2 da revisão L11. Arquivar a resposta de um `202` publicaria um artefato
+    que o tribunal ainda não declarou pronto, e L2 (semântica da geração) segue não
+    confirmada. A regra vem do HTTP, não de uma suposição sobre o PDPJ: por isso ela
+    não depende do predicado `geracao_pendente`, que existe para o corpo JSON.
+    """
+    transport = FakeTransport(Resposta(202, PDF, {"Retry-After": "7"}))
+    with pytest.raises(GeracaoPendenteError) as error:
+        await download(adapter(transport))
+    assert error.value.tentar_em_segundos == 7
+    assert len(transport.calls) == 1
+
+
+async def test_accepted_status_is_not_a_document_listing() -> None:
+    """Mesma regra na listagem: `202` não é corpo final, então não vira documento."""
+    transport = FakeTransport(Resposta(202, process().corpo))
+    with pytest.raises(GeracaoPendenteError):
+        await adapter(transport).list_documents(SESSION, CNJ, Grau.PRIMEIRO)
+
+
+async def test_rejects_two_documents_sharing_one_binary_url() -> None:
+    """Dois `idOrigem` distintos apontando para o mesmo binário é ambiguidade.
+
+    Achado 1 da revisão L11, na parte que é provável sem medição nova. Não dá para
+    exigir que o id da URL seja igual ao `idOrigem` — a evidência H1 registra a rota
+    como `/documentos/{uuid}/binario` e **não** diz qual id é esse uuid (ver L14).
+    Mas dois documentos distintos disputando um binário só pode acabar em atribuir
+    os mesmos bytes a duas peças, então isso para aqui.
+    """
+    transport = FakeTransport(
+        process(
+            wire_document(),
+            wire_document(
+                idOrigem="synthetic-doc-2",
+                sequencia=2,
+                hrefBinario=f"/processos/{CNJ}/documentos/synthetic-doc-1/binario",
+            ),
+        )
+    )
+    with pytest.raises(PermanenteError):
+        await adapter(transport).list_documents(SESSION, CNJ, Grau.PRIMEIRO)

@@ -225,9 +225,19 @@ class PdpjAdapter:
         if not isinstance(origem, str) or not origem:
             raise PermanenteError("Documento sem idOrigem")
         tipo = doc.get("tipo")
-        codigo = None if tipo is None else _objeto(tipo).get("codigo")
+        tipo_obj = None if tipo is None else _objeto(tipo)
+        codigo = None if tipo_obj is None else tipo_obj.get("codigo")
         if codigo is not None and (type(codigo) not in (int, str) or not str(codigo)):
             raise PermanenteError("Codigo de tipo invalido")
+        # Medido ao vivo em 2026-09-17: o PDPJ nacional manda "tipo" sem "codigo"
+        # nenhum (só "nome"/"idCodex"/"idOrigem") — o formato com "codigo" pode
+        # existir em outro canal/tribunal, mas não é o que este processo real
+        # devolveu. Sem "codigo", cai para o nome do tipo — melhor sinal disponível
+        # do que nenhum, e quem decide o mapeamento nome->TipoDocumento é o
+        # chamador (`tipos_por_codigo`), não este método.
+        tipo_nome = None if tipo_obj is None else tipo_obj.get("nome")
+        if tipo_nome is not None and not isinstance(tipo_nome, str):
+            raise PermanenteError("Nome de tipo invalido")
         sequencia = doc.get("sequencia")
         if sequencia is not None and (type(sequencia) is not int or sequencia < 0):
             raise PermanenteError("Sequencia invalida")
@@ -254,7 +264,7 @@ class PdpjAdapter:
             numero_cnj=numero_cnj,
             grau=grau,
             titulo=nome,
-            tipo_pje=str(codigo) if codigo is not None else None,
+            tipo_pje=str(codigo) if codigo is not None else tipo_nome,
             juntado_em=juntado_em,
             sequencia=sequencia,
             href_binario=self._url(href, numero_cnj) if href else None,

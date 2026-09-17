@@ -146,6 +146,27 @@ async def test_maps_public_and_restricted_without_dropping_refs() -> None:
     assert transport.calls == [f"{BASE_URL}/processos/{CNJ}"]
 
 
+async def test_tipo_pje_cai_para_nome_quando_sem_codigo() -> None:
+    """Regressão: medido ao vivo que o PDPJ nacional manda "tipo" sem "codigo"
+    (só "nome"/"idCodex"/"idOrigem"). Sem fallback, tipo_pje ficava None pra todo
+    documento real e a classificação por tipo_pje não tinha nenhum sinal."""
+    transport = FakeTransport(
+        process(wire_document(tipo={"nome": "Documento Diverso", "idCodex": 1278101}))
+    )
+    docs = await adapter(transport).list_documents(SESSION, CNJ, Grau.PRIMEIRO)
+    assert docs[0].tipo_pje == "Documento Diverso"
+
+
+async def test_tipo_pje_prefere_codigo_quando_ambos_presentes() -> None:
+    """codigo continua tendo prioridade — não muda comportamento de quem já manda
+    o formato antigo (canal/tribunal que usa código numérico)."""
+    transport = FakeTransport(
+        process(wire_document(tipo={"codigo": 202, "nome": "Peticao Inicial"}))
+    )
+    docs = await adapter(transport).list_documents(SESSION, CNJ, Grau.PRIMEIRO)
+    assert docs[0].tipo_pje == "202"
+
+
 async def test_accepts_naive_juntada_datetime_without_offset() -> None:
     """Regressão: medido ao vivo que o PDPJ nacional manda dataHoraJuntada sem
     offset ("2026-09-01T00:24:36.704938"). Exigir offset rejeitava toda peça real

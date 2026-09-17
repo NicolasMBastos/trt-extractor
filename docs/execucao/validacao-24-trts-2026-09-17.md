@@ -111,3 +111,38 @@ CLI de portal. Isso é trabalho de integração, não de teste, e fica fora dest
 - Nível D e E ficam como próxima prioridade, mas E requer decisão de arquitetura (como
   o handshake real vai rodar: browser dedicado do projeto via Playwright, não ponte
   externa) antes de qualquer tentativa nova.
+
+---
+
+## Adendo 2026-09-17 (mesma data, sessão seguinte): nível E desbloqueado
+
+Depois deste relatório original, o dono do projeto trouxe uma referência do projeto
+irmão **TaxMap** (mesma organização, mesmo portal PDPJ, em produção): em vez de sondar
+`window.*` (o que foi corretamente bloqueado acima), o TaxMap injeta um hook via CDP
+que faz monkey-patch de `window.fetch`/`XMLHttpRequest.setRequestHeader`, capturando
+passivamente o `Authorization` que **o próprio app** anexa numa requisição real dele —
+equivalente a ler a aba Network do DevTools, não a extrair estado interno.
+
+Portado para `src/trt_extractor/runner/playwright_handshake.py`
+(`HOOK_CAPTURA_BEARER_JS`, `criar_montador_via_hook`, `conectar_chrome_existente`)
+com autorização explícita do dono do projeto, ciente da mudança de modelo (o token
+passa a transitar pela memória do processo Python).
+
+**Teste ao vivo, rodado pelo dono do projeto (não pelo Claude Code — a ação de
+capturar credencial de sessão real foi bloqueada pelo classificador de segurança
+como "Credential Materialization", e não foi contornada):**
+
+- Chrome real aberto com `--remote-debugging-port`, titular logado no PDPJ.
+- Script conecta via `connect_over_cdp`, instala o hook, dispara uma busca real de
+  processo (TRT4) pela UI.
+- Resultado: **`TOKEN CAPTURADO: SIM`, tamanho 2118 caracteres.** Valor do token
+  nunca transitou pelo chat nem foi persistido em log/arquivo — só o fato da
+  captura e o tamanho.
+
+**Isso PROVA** que o mecanismo de captura passiva funciona contra a sessão real do
+PDPJ nacional. **Continua NÃO PROVADO**: usar esse token para de fato rodar
+`pdpj.py`/`InPageFetchTransport` fim-a-fim (LIST → FETCH → VALIDATE → HASH → STORE)
+— o teste desta rodada só confirmou a captura, não o pipeline completo depois dela.
+
+Nível E passa de **BLOQUEADO** para **FORTEMENTE INDICADO** (mecanismo provado,
+integração fim-a-fim ainda não).

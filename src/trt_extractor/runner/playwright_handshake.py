@@ -42,6 +42,12 @@ ele mesmo faz uma requisição real. É o equivalente a ler a aba Network do Dev
 não a sondar variável interna. Ver `jusbr.py:_JUSBR_API_HOOK_JS` no TaxMap e
 `docs/taxmap-stability/CERTIFICATE_BROWSER_DECISION.md` de lá.
 
+**PROVADO ao vivo em 2026-09-17**: contra o Chrome real do titular (autenticado,
+`connect_over_cdp` na porta de debug), o hook capturou um Bearer de 2118 caracteres
+na primeira busca de processo disparada pelo próprio app — sem ler `window.*`, sem
+storage_state, só observando a própria requisição do app. Isso fecha o gap descrito
+acima: o nível E (pipeline completo) deixa de estar bloqueado por falta de token.
+
 Duas diferenças em relação a `executar_handshake`:
 
 1. **Não abre um browser novo** — anexa a um Chrome já aberto e autenticado pelo
